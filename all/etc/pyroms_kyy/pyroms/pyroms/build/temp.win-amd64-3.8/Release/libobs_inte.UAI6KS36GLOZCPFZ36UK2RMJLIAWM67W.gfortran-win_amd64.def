@@ -1,0 +1,7 @@
+EXPORTS
+    f2pywrapinside_ @1
+    f2pywraptry_range_ @2
+    hindices_ @3
+    inside_ @4
+    linterp2d_ @5
+    try_range_ @6

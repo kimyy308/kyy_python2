@@ -1,0 +1,69 @@
+Here are some examples of using the pyroms package (plus maybe a few
+plain python examples).
+
+For those of us who don't have the grid information in every ROMS
+output file, the gridid.txt file here is used to provide some
+information to pyroms about our grids. Point to it with the
+PYROMS_GRIDID_FILE environment variable.
+
+************************************************************************
+*** For all the interpolating, run the make_weight_files.py script   ***
+*** first. Also, make sure all the files have the same               ***
+*** irange,jrange,ystart for your specific domain.                   ***
+************************************************************************
+
+INTERPOLATING FROM SODA:
+
+   The Yellow_Sea directory contains code for creating a grid,
+   bathymetry, initial and boundary files (the last from SODA,
+   http://www.atmos.umd.edu/~ocean/).
+
+   The Arctic2 directory has code for interpolating from SODA across all
+   longitudes. It also shows how to use multiprocessing for the boundary
+   conditions and climatology files - be sure to set the number of processes
+   desired.
+
+   Added a couple of SODA3 examples, but the Arctic isn't working yet.
+
+INTERPOLATING FROM LARGER ROMS DOMAINS:
+
+   For creating initial and boundary files from larger ROMS grids,
+   there are two cases:
+
+   1. Where the small grid is aligned with the large grid, no velocity
+   rotation needed. See the Bering directory.
+
+   2. Where the grids are not aligned and velocities need to be rotated.
+   See the Beaufort example. The ice boundary script uses multiprocessing,
+   by month.
+
+   These all depend on pyroms_toolbox/remapping*.py.
+
+INTERPOLATING FROM GLOBAL HYCOM:
+
+    Scripts in Arctic_HYCOM - scripts to get the HYCOM files
+    (subsets of the global fields) and scripts to interpolate from them.
+
+    Also Palau_HYCOM shows how to do a non-polar subset of the HYCOM
+    files.
+
+INTERPOLATING FROM GLOBAL RUNOFF:
+
+    Scripts in Arctic_runoff were used to convert from Dai and Trenberth
+    global runoff to the ROMS coastal regions (like a second rain, but from
+    rivers).
+
+RIVERS:
+
+    The rivers directory has stuff for turning ARDAT (Arctic Rivers)
+    into ROMS sources.
+
+NESTING:
+
+    So far the nesting directory has only tools for processing the
+    ocean_xx.in files, merging them for nested grid domains.
+
+BOUNDARY CONDITIONS FROM A STATIONS FILE:
+
+    BC_from_sta contains one rough stab at this. Work to be done on
+    volume transports.

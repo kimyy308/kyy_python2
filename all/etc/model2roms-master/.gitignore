@@ -1,0 +1,9 @@
+*.so
+*.dSYM
+.idea
+.vscode
+*.nc
+*_LogFile
+*.pyc
+*.pdf
+\.DS_Store
