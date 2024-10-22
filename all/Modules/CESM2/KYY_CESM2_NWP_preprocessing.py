@@ -46,7 +46,8 @@ class CESM2_NWP_config:
     def ODA_path_load(self, var):
         # ODA path check
         # /mnt/lustre/proj/kimyy/tr_sysong/fld/ASSM_EXP/archive/b.e21.BHISTsmbb.f09_g17.assm.en4.2_ba-10p1/ocn
-        self.ODA_rootdir = '/mnt/lustre/proj/earth.system.predictability/ASSM_EXP_timeseries/archive'
+        # self.ODA_rootdir = '/mnt/lustre/proj/earth.system.predictability/ASSM_EXP_timeseries/archive'
+        self.ODA_rootdir = '/mnt/lustre/proj/kimyy/tr_sysong/fld/ASSM_EXP/archive'
         scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
         command='ls ' + self.ODA_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
         ODA_members_raw = subprocess.check_output(command, shell=True, text=True)
@@ -56,7 +57,7 @@ class CESM2_NWP_config:
         ODA_ens_files=[]
         for member in self.ODA_members :
             ODA_files=[]    
-            command='ls ' + self.ODA_rootdir + '/*' + member + '*/' + self.comp + '/proc/tseries/' + self.tfreq + '| grep \'\.' + self.var + '\.\''
+            command='ls ' + self.ODA_rootdir + '/*' + member + '*/' + self.comp + '/' +  '| grep \'\.' + self.var + '\.\''
             # print(command)
             ODA_files_raw = subprocess.check_output(command, shell=True, text=True)
             ODA_files= [entry for entry in ODA_files_raw.split('\n') if entry]
@@ -65,7 +66,8 @@ class CESM2_NWP_config:
             ODA_filtered_files = []
             for fname in ODA_files:
                 # print(fname)  # Debugging: print each file name
-                match1 = re_mod.search(r'-(\d{4})12', fname)
+                match1 = re_mod.search(r'-(\d{4})\d{2}.nc', fname)
+                # match1 = re_mod.search(r'-(\d{4})12', fname)
                 match2 = re_mod.search(r'\.(\d{4})01', fname)
                 # Ensure the regex matches and then check the year range
                 if match1 and match2:
@@ -73,9 +75,12 @@ class CESM2_NWP_config:
                     year2 = int(match2.group(1))
                     if year1 >= self.year_s and year2 <= self.year_e:
                         scenario=re_mod.search(scenarios, fname).group(1)
-                        fpath=self.ODA_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' + member + '/' + self.comp + '/proc/tseries/' + self.tfreq + '/' + fname
+                        fpath=self.ODA_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' + member + '/' + self.comp + '/' + fname
                         # print(fpath)
                         ODA_filtered_files.append(fpath)
+                pattern = r"\.pop\.h\.\d{4}-\d{2}\.nc$"
+                if re_mod.search(pattern, fname):
+                    ODA_filtered_files.append(fpath)
             ODA_ens_files.append(ODA_filtered_files)
         ODA_file_list.append(ODA_ens_files)
         self.ODA_file_list=ODA_file_list
