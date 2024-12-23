@@ -205,7 +205,7 @@ class CESM2_config:
             case 'SOILWATER_10CM':
                 self.OBS_var='SMsurf' #GLEAM
                 self.OBS_dataname='GLEAM'
-                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + self.OBS_var + '/' + 'monthly_reg_' + self.model[:3]                
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + self.OBS_var + '/' + 'monthly_reg_' + self.model[:3]
             case 'TWS':
                 self.OBS_var='w'
                 self.OBS_dataname='NOAA'
@@ -256,6 +256,18 @@ class CESM2_config:
             case 'GPP':
                 self.OBS_var='GPP'
                 self.OBS_dataname='VODCA2GPP'
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'monthly_reg_' + self.model[:3]
+            case 'FG_CO2':
+                self.OBS_var='fgco2_smoothed'
+                self.OBS_dataname='SOM-FFN'
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'monthly_reg_' + self.model[:3]
+            case 'DpCO2':
+                self.OBS_var='dco2'
+                self.OBS_dataname='SOM-FFN'
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'monthly_reg_' + self.model[:3]
+            case 'DpCO2_ALT_CO2':
+                self.OBS_var='dco2'
+                self.OBS_dataname='SOM-FFN'
                 self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'monthly_reg_' + self.model[:3]
             case _:
                 self.OBS_var='nan'
