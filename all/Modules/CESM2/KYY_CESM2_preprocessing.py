@@ -26,23 +26,38 @@ class CESM2_config:
         self.var=var
         df = pd.read_csv('/mnt/lustre/proj/earth.system.predictability/LENS2/LENS2_output_200129.csv', header=None, on_bad_lines='skip')
         #filtered_row = df[df[3].str.contains(self.var, regex=True, na=False)]
-        filtered_row = df[df[3].str.match(self.var)]
+        # filtered_row = df[df[3].str.match(self.var)]
+        filtered_row = df[df[3] == self.var]
         self.comp = filtered_row.iloc[0, 0]      
         self.long_name = ''.join(filtered_row.iloc[0, 5])
         self.unit = filtered_row.iloc[0, 6]       
         self.dimension = filtered_row.iloc[0, 7]  
         self.ndim = len(self.dimension.split())
-        self.tfreq='month_1'
-        # set component
-        if self.comp=='ocn':
-            self.model='pop.h'
-        elif self.comp=='ice':
-            self.model='cice.h'
-        elif self.comp=='atm':
-            self.model='cam.h0'
-        elif self.comp=='lnd':
-            self.model='clm2.h0'
+        self.tfreq = filtered_row.iloc[0, 2]
 
+        self.tfreq='month_1' # temporary setting 
+
+        if self.var == "TAUX" or self.var == "TAUY" or self.var == "NO3" or self.var == "TEMP" or self.var == "PD" or self.var == "PV":
+            self.comp = "ocn"
+            self.tfreq='month_1'
+
+        if self.var == "Z500" or self.var == "spChl_SURF" or self.var == "diatChl_SURF" or self.var == "diazChl_SURF":
+            self.tfreq='day_1'
+        
+        # set component
+        if self.tfreq=='month_1':
+            if self.comp=='ocn':
+                self.model='pop.h'
+            elif self.comp=='ice':
+                self.model='cice.h'
+            elif self.comp=='atm':
+                self.model='cam.h0'
+            elif self.comp=='lnd':
+                self.model='clm2.h0'
+        elif self.tfreq=='day_1':
+            if self.comp=='atm':
+                self.model='cam.h1'
+    
     def HCST_path_load(self, var):
         # HCST path check
         self.HCST_rootdir = '/mnt/lustre/proj/earth.system.predictability/HCST_EXP_timeseries/archive'
@@ -53,6 +68,25 @@ class CESM2_config:
         self.HCST_file_list=[]
         HCST_file_list=[]
         
+        # HCST_iy_files = []
+        # for iyear in range(self.year_s, self.year_e+1):
+        #     HCST_ens_files=[]
+        #     for member in self.HCST_members:
+        #         HCST_files=[]    
+        #         HCST_casename_M=self.resol + '.hcst.' + member
+        #         HCST_casename = HCST_casename_M + '_i' + str(iyear)
+        #         # command='ls ' + self.HCST_rootdir + '/*' + member + '*/' + self.comp + '/proc/tseries/' + self.tfreq + '| grep \'\.' + self.var + '\.\''
+        #         # print(command)
+        #         HCST_files = (
+        #             self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' +
+        #             self.comp + '/proc/tseries/' + self.tfreq + '/' + HCST_casename + '.' +
+        #             self.model + '.' + self.var + '.' + str(iyear) + '01' + '-' +
+        #             str(iyear + 4) + '12' + '.nc'
+        #         )
+        #         HCST_ens_files.append(HCST_files)
+        #     HCST_iy_files.append(HCST_ens_files)
+        # self.HCST_file_list=HCST_iy_files
+        
         HCST_iy_files = []
         for iyear in range(self.year_s, self.year_e+1):
             HCST_ens_files=[]
@@ -62,13 +96,28 @@ class CESM2_config:
                 HCST_casename = HCST_casename_M + '_i' + str(iyear)
                 # command='ls ' + self.HCST_rootdir + '/*' + member + '*/' + self.comp + '/proc/tseries/' + self.tfreq + '| grep \'\.' + self.var + '\.\''
                 # print(command)
-                HCST_files = (
-                    self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' +
-                    self.comp + '/proc/tseries/' + self.tfreq + '/' + HCST_casename + '.' +
-                    self.model + '.' + self.var + '.' + str(iyear) + '01' + '-' +
-                    str(iyear + 4) + '12' + '.nc'
+                command= ( 
+                    'ls ' + self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' + 
+                    self.comp + '/proc/tseries/' + self.tfreq + '| grep \'\.' + self.var + '\.\''
                 )
-                HCST_ens_files.append(HCST_files)
+                HCST_files_raw = subprocess.check_output(command, shell=True, text=True)
+                HCST_files= [entry for entry in HCST_files_raw.split('\n') if entry]
+                HCST_files = sorted(HCST_files)
+                # Filter the files based on your criteria
+                HCST_filtered_files = []
+                for fname in HCST_files:
+                    # print(fname)  # Debugging: print each file name
+                    match1 = re_mod.search(r'-(\d{4})12', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                    # Ensure the regex matches and then check the year range
+                    if match1 and match2:
+                        year1 = int(match1.group(1))
+                        year2 = int(match2.group(1))
+                        if year1 >= self.year_s and year2 <= self.year_e:
+                            fpath=self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' + self.comp + '/proc/tseries/' + self.tfreq + '/' + fname
+                            # print(fpath)
+                            HCST_filtered_files.append(fpath)
+                HCST_ens_files.append(HCST_filtered_files)                
             HCST_iy_files.append(HCST_ens_files)
         self.HCST_file_list=HCST_iy_files
     
@@ -130,8 +179,14 @@ class CESM2_config:
             for fname in ADA_files:
                 # print(fname)  # Debugging: print each file name
                 # match1 = re_mod.search(r'-(\d{4})12', fname)
-                match1 = re_mod.search(r'-(\d{4})\d{2}.nc', fname)
-                match2 = re_mod.search(r'\.(\d{4})01', fname)
+                
+                # self.model='cam.h1'
+                if self.tfreq=='month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif self.tfreq=='day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
                 # Ensure the regex matches and then check the year range
                 if match1 and match2:
                     year1 = int(match1.group(1))
@@ -144,6 +199,50 @@ class CESM2_config:
             ADA_ens_files.append(ADA_filtered_files)
         ADA_file_list.append(ADA_ens_files)
         self.ADA_file_list=ADA_file_list
+
+    def WDA_path_load(self, var):
+        # WDA path check
+        self.WDA_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_ATM_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command='ls ' + self.WDA_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        WDA_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.WDA_members= [entry for entry in WDA_members_raw.split('\n') if entry]
+        self.WDA_ensembles = [ens for ens in range(len(self.WDA_members))]
+        WDA_file_list=[]
+        WDA_ens_files=[]
+        for member in self.WDA_members :
+            WDA_files=[]    
+            command='ls ' + self.WDA_rootdir + '/*' + member + '*/' + self.comp + '/proc/tseries/' + self.tfreq + '| grep \'\.' + self.var + '\.\''
+            # print(command)
+            WDA_files_raw = subprocess.check_output(command, shell=True, text=True)
+            WDA_files= [entry for entry in WDA_files_raw.split('\n') if entry]
+            WDA_files = sorted(WDA_files)
+            # Filter the files based on your criteria
+            WDA_filtered_files = []
+            for fname in WDA_files:
+                # print(fname)  # Debugging: print each file name
+                # match1 = re_mod.search(r'-(\d{4})12', fname)
+                
+                # self.model='cam.h1'
+                if self.tfreq=='month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif self.tfreq=='day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                # Ensure the regex matches and then check the year range
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario=re_mod.search(scenarios, fname).group(1)
+                        fpath=self.WDA_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' + member + '/' + self.comp + '/proc/tseries/' + self.tfreq + '/' + fname
+                        # print(fpath)
+                        WDA_filtered_files.append(fpath)
+            WDA_ens_files.append(WDA_filtered_files)
+        WDA_file_list.append(WDA_ens_files)
+        self.WDA_file_list=WDA_file_list
+    
 
     def LE_path_load(self, var):
         # LE path check
@@ -166,13 +265,14 @@ class CESM2_config:
             LE_filtered_files = []
             for fname in LE_files:
                 # print(fname)  # Debugging: print each file name
-                match1 = re_mod.search(r'-(\d{4})12', fname)
+                # match1 = re_mod.search(r'-(\d{4})12', fname)
+                match1 = re_mod.search(r'-(\d{6})', fname)
                 match2 = re_mod.search(r'\.(\d{4})01', fname)
                 # Ensure the regex matches and then check the year range
                 if match1 and match2:
-                    year1 = int(match1.group(1))
+                    year1 = int(match1.group(1)[0:4])
                     year2 = int(match2.group(1))
-                    if year1 >= self.year_s and year2 <= self.year_e:
+                    if year1 > self.year_s and year2 <= self.year_e:
                         scenario=re_mod.search(scenarios, fname).group(1)
                         fpath=self.LE_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' + member + '/' + self.comp + '/proc/tseries/' + self.tfreq + '/' + fname
                         # print(fpath)
@@ -188,7 +288,11 @@ class CESM2_config:
         match self.var:
             case 'SST':
                 self.OBS_var='sst'
-                self.OBS_dataname='ERSST'
+                self.OBS_dataname='HadISST1'
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'monthly_reg_' + self.model[:3]
+            case 'TEMP':
+                self.OBS_var='sst'
+                self.OBS_dataname='HadISST1'
                 self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'monthly_reg_' + self.model[:3]
             case 'PRECT':
                 self.OBS_var='precip'
@@ -202,6 +306,14 @@ class CESM2_config:
                 self.OBS_var='msl'
                 self.OBS_dataname='ERA5'
                 self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + self.OBS_var + '/' + 'monthly_reg_' + self.model[:3]
+            case 'Z200':
+                self.OBS_var='z'
+                self.OBS_dataname='ERA5'
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'geopotential_p200' + '/' + 'monthly_reg_' + self.model[:3]
+            case 'Z500':
+                self.OBS_var='z'
+                self.OBS_dataname='ERA5'
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'geopotential' + '/' + 'monthly_reg_' + self.model[:3]
             case 'SOILWATER_10CM':
                 self.OBS_var='SMsurf' #GLEAM
                 self.OBS_dataname='GLEAM'
