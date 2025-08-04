@@ -41,7 +41,7 @@ class CESM2_config:
             self.comp = "ocn"
             self.tfreq='month_1'
 
-        if self.var == "Z500" or self.var == "spChl_SURF" or self.var == "diatChl_SURF" or self.var == "diazChl_SURF":
+        if self.var == "Z500" or self.var == "spChl_SURF" or self.var == "diatChl_SURF" or self.var == "diazChl_SURF" or self.var == "UBOT" or self.var == "VBOT":
             self.tfreq='day_1'
         
         # set component
@@ -57,229 +57,259 @@ class CESM2_config:
         elif self.tfreq=='day_1':
             if self.comp=='atm':
                 self.model='cam.h1'
+            if self.comp=='ocn':
+                self.model='pop.h'
     
-    def HCST_path_load(self, var):
-        # HCST path check
+    def HCST_path_load(self, var, tfreq=None, model=None):
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
         self.HCST_rootdir = '/mnt/lustre/proj/earth.system.predictability/HCST_EXP_timeseries/archive'
-        command='ls ' + self.HCST_rootdir + '| grep f09_g17 | cut -d ''.'' -f 3-4'
+        command = 'ls ' + self.HCST_rootdir + '| grep f09_g17 | cut -d ''.'' -f 3-4'
         HCST_members_raw = subprocess.check_output(command, shell=True, text=True)
-        self.HCST_members= [entry for entry in HCST_members_raw.split('\n') if entry]
+        self.HCST_members = [entry for entry in HCST_members_raw.split('\n') if entry]
         self.HCST_ensembles = [ens for ens in range(len(self.HCST_members))]
-        self.HCST_file_list=[]
-        HCST_file_list=[]
-        
-        # HCST_iy_files = []
-        # for iyear in range(self.year_s, self.year_e+1):
-        #     HCST_ens_files=[]
-        #     for member in self.HCST_members:
-        #         HCST_files=[]    
-        #         HCST_casename_M=self.resol + '.hcst.' + member
-        #         HCST_casename = HCST_casename_M + '_i' + str(iyear)
-        #         # command='ls ' + self.HCST_rootdir + '/*' + member + '*/' + self.comp + '/proc/tseries/' + self.tfreq + '| grep \'\.' + self.var + '\.\''
-        #         # print(command)
-        #         HCST_files = (
-        #             self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' +
-        #             self.comp + '/proc/tseries/' + self.tfreq + '/' + HCST_casename + '.' +
-        #             self.model + '.' + self.var + '.' + str(iyear) + '01' + '-' +
-        #             str(iyear + 4) + '12' + '.nc'
-        #         )
-        #         HCST_ens_files.append(HCST_files)
-        #     HCST_iy_files.append(HCST_ens_files)
-        # self.HCST_file_list=HCST_iy_files
-        
+        self.HCST_file_list = []
+    
         HCST_iy_files = []
-        for iyear in range(self.year_s, self.year_e+1):
-            HCST_ens_files=[]
+        for iyear in range(self.year_s, self.year_e + 1):
+            HCST_ens_files = []
             for member in self.HCST_members:
-                HCST_files=[]    
-                HCST_casename_M=self.resol + '.hcst.' + member
+                HCST_casename_M = self.resol + '.hcst.' + member
                 HCST_casename = HCST_casename_M + '_i' + str(iyear)
-                # command='ls ' + self.HCST_rootdir + '/*' + member + '*/' + self.comp + '/proc/tseries/' + self.tfreq + '| grep \'\.' + self.var + '\.\''
-                # print(command)
-                command= ( 
-                    'ls ' + self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' + 
-                    self.comp + '/proc/tseries/' + self.tfreq + '| grep \'\.' + self.var + '\.\''
+                # command = ( 
+                #     'ls ' + self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' + 
+                #     self.comp + '/proc/tseries/' + tfreq + '| grep \'.' + var + '\.'' + '| grep \'' + model + '\''
+                # )
+                command = (
+                    'ls ' + self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' +
+                    self.comp + '/proc/tseries/' + tfreq + "| grep '." + var + ".' | grep '" + model + "'"
                 )
                 HCST_files_raw = subprocess.check_output(command, shell=True, text=True)
-                HCST_files= [entry for entry in HCST_files_raw.split('\n') if entry]
+                HCST_files = [entry for entry in HCST_files_raw.split('\n') if entry]
                 HCST_files = sorted(HCST_files)
-                # Filter the files based on your criteria
+    
                 HCST_filtered_files = []
                 for fname in HCST_files:
-                    # print(fname)  # Debugging: print each file name
                     match1 = re_mod.search(r'-(\d{4})12', fname)
                     match2 = re_mod.search(r'\.(\d{4})01', fname)
-                    # Ensure the regex matches and then check the year range
                     if match1 and match2:
                         year1 = int(match1.group(1))
                         year2 = int(match2.group(1))
                         if year1 >= self.year_s and year2 <= self.year_e:
-                            fpath=self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' + self.comp + '/proc/tseries/' + self.tfreq + '/' + fname
-                            # print(fpath)
+                            fpath = (
+                                self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' +
+                                self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                            )
                             HCST_filtered_files.append(fpath)
                 HCST_ens_files.append(HCST_filtered_files)                
             HCST_iy_files.append(HCST_ens_files)
-        self.HCST_file_list=HCST_iy_files
     
-    def ODA_path_load(self, var):
-        # ODA path check
+        self.HCST_file_list = HCST_iy_files
+
+    
+    def ODA_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
         self.ODA_rootdir = '/mnt/lustre/proj/earth.system.predictability/ASSM_EXP_timeseries/archive'
         scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
-        command='ls ' + self.ODA_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+    
+        command = 'ls ' + self.ODA_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
         ODA_members_raw = subprocess.check_output(command, shell=True, text=True)
-        self.ODA_members= [entry for entry in ODA_members_raw.split('\n') if entry]
+        self.ODA_members = [entry for entry in ODA_members_raw.split('\n') if entry]
         self.ODA_ensembles = [ens for ens in range(len(self.ODA_members))]
-        ODA_file_list=[]
-        ODA_ens_files=[]
-        for member in self.ODA_members :
-            ODA_files=[]    
-            command='ls ' + self.ODA_rootdir + '/*' + member + '*/' + self.comp + '/proc/tseries/' + self.tfreq + '| grep \'\.' + self.var + '\.\''
-            # print(command)
+    
+        ODA_file_list = []
+        ODA_ens_files = []
+    
+        for member in self.ODA_members:
+            command = (
+                'ls ' + self.ODA_rootdir + '/*' + member + '*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
             ODA_files_raw = subprocess.check_output(command, shell=True, text=True)
-            ODA_files= [entry for entry in ODA_files_raw.split('\n') if entry]
+            ODA_files = [entry for entry in ODA_files_raw.split('\n') if entry]
             ODA_files = sorted(ODA_files)
-            # Filter the files based on your criteria
+    
             ODA_filtered_files = []
             for fname in ODA_files:
-                # print(fname)  # Debugging: print each file name
-                match1 = re_mod.search(r'-(\d{4})12', fname)
-                match2 = re_mod.search(r'\.(\d{4})01', fname)
-                # Ensure the regex matches and then check the year range
-                if match1 and match2:
-                    year1 = int(match1.group(1))
-                    year2 = int(match2.group(1))
-                    if year1 >= self.year_s and year2 <= self.year_e:
-                        scenario=re_mod.search(scenarios, fname).group(1)
-                        fpath=self.ODA_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' + member + '/' + self.comp + '/proc/tseries/' + self.tfreq + '/' + fname
-                        # print(fpath)
-                        ODA_filtered_files.append(fpath)
-            ODA_ens_files.append(ODA_filtered_files)
-        ODA_file_list.append(ODA_ens_files)
-        self.ODA_file_list=ODA_file_list
-
-    def ADA_path_load(self, var):
-        # ADA path check
-        self.ADA_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_ALL_timeseries/archive'
-        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
-        command='ls ' + self.ADA_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
-        ADA_members_raw = subprocess.check_output(command, shell=True, text=True)
-        self.ADA_members= [entry for entry in ADA_members_raw.split('\n') if entry]
-        self.ADA_ensembles = [ens for ens in range(len(self.ADA_members))]
-        ADA_file_list=[]
-        ADA_ens_files=[]
-        for member in self.ADA_members :
-            ADA_files=[]    
-            command='ls ' + self.ADA_rootdir + '/*' + member + '*/' + self.comp + '/proc/tseries/' + self.tfreq + '| grep \'\.' + self.var + '\.\''
-            # print(command)
-            ADA_files_raw = subprocess.check_output(command, shell=True, text=True)
-            ADA_files= [entry for entry in ADA_files_raw.split('\n') if entry]
-            ADA_files = sorted(ADA_files)
-            # Filter the files based on your criteria
-            ADA_filtered_files = []
-            for fname in ADA_files:
-                # print(fname)  # Debugging: print each file name
-                # match1 = re_mod.search(r'-(\d{4})12', fname)
-                
-                # self.model='cam.h1'
-                if self.tfreq=='month_1':
+                if tfreq == 'month_1':
                     match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
                     match2 = re_mod.search(r'\.(\d{4})01', fname)
-                elif self.tfreq=='day_1':
+                elif tfreq == 'day_1':
                     match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
                     match2 = re_mod.search(r'\.(\d{4})01', fname)
-                # Ensure the regex matches and then check the year range
+    
                 if match1 and match2:
                     year1 = int(match1.group(1))
                     year2 = int(match2.group(1))
                     if year1 >= self.year_s and year2 <= self.year_e:
-                        scenario=re_mod.search(scenarios, fname).group(1)
-                        fpath=self.ADA_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' + member + '/' + self.comp + '/proc/tseries/' + self.tfreq + '/' + fname
-                        # print(fpath)
-                        ADA_filtered_files.append(fpath)
-            ADA_ens_files.append(ADA_filtered_files)
-        ADA_file_list.append(ADA_ens_files)
-        self.ADA_file_list=ADA_file_list
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.ODA_rootdir + '/' + 'b.e21.' + scenario + '.' +
+                            self.resol + '.' + member + '/' + self.comp +
+                            '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        ODA_filtered_files.append(fpath)
+    
+            ODA_ens_files.append(ODA_filtered_files)
+    
+        ODA_file_list.append(ODA_ens_files)
+        self.ODA_file_list = ODA_file_list
 
-    def WDA_path_load(self, var):
+    def ADA_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        self.ADA_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_ALL_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+    
+        command = 'ls ' + self.ADA_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        ADA_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.ADA_members = [entry for entry in ADA_members_raw.split('\n') if entry]
+        self.ADA_ensembles = [ens for ens in range(len(self.ADA_members))]
+    
+        ADA_file_list = []
+        ADA_ens_files = []
+    
+        for member in self.ADA_members:
+            command = (
+                'ls ' + self.ADA_rootdir + '/*' + member + '*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            ADA_files_raw = subprocess.check_output(command, shell=True, text=True)
+            ADA_files = [entry for entry in ADA_files_raw.split('\n') if entry]
+            ADA_files = sorted(ADA_files)
+    
+            ADA_filtered_files = []
+            for fname in ADA_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.ADA_rootdir + '/' + 'b.e21.' + scenario + '.' +
+                            self.resol + '.' + member + '/' + self.comp +
+                            '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        ADA_filtered_files.append(fpath)
+    
+            ADA_ens_files.append(ADA_filtered_files)
+    
+        ADA_file_list.append(ADA_ens_files)
+        self.ADA_file_list = ADA_file_list
+
+    def WDA_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
         # WDA path check
         self.WDA_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_ATM_timeseries/archive'
         scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
-        command='ls ' + self.WDA_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        command = 'ls ' + self.WDA_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
         WDA_members_raw = subprocess.check_output(command, shell=True, text=True)
-        self.WDA_members= [entry for entry in WDA_members_raw.split('\n') if entry]
+        self.WDA_members = [entry for entry in WDA_members_raw.split('\n') if entry]
         self.WDA_ensembles = [ens for ens in range(len(self.WDA_members))]
-        WDA_file_list=[]
-        WDA_ens_files=[]
-        for member in self.WDA_members :
-            WDA_files=[]    
-            command='ls ' + self.WDA_rootdir + '/*' + member + '*/' + self.comp + '/proc/tseries/' + self.tfreq + '| grep \'\.' + self.var + '\.\''
-            # print(command)
+    
+        WDA_file_list = []
+        WDA_ens_files = []
+    
+        for member in self.WDA_members:
+            command = (
+                'ls ' + self.WDA_rootdir + '/*' + member + '*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
             WDA_files_raw = subprocess.check_output(command, shell=True, text=True)
-            WDA_files= [entry for entry in WDA_files_raw.split('\n') if entry]
+            WDA_files = [entry for entry in WDA_files_raw.split('\n') if entry]
             WDA_files = sorted(WDA_files)
-            # Filter the files based on your criteria
+    
             WDA_filtered_files = []
             for fname in WDA_files:
-                # print(fname)  # Debugging: print each file name
-                # match1 = re_mod.search(r'-(\d{4})12', fname)
-                
-                # self.model='cam.h1'
-                if self.tfreq=='month_1':
+                if tfreq == 'month_1':
                     match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
                     match2 = re_mod.search(r'\.(\d{4})01', fname)
-                elif self.tfreq=='day_1':
+                elif tfreq == 'day_1':
                     match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
                     match2 = re_mod.search(r'\.(\d{4})01', fname)
-                # Ensure the regex matches and then check the year range
+    
                 if match1 and match2:
                     year1 = int(match1.group(1))
                     year2 = int(match2.group(1))
                     if year1 >= self.year_s and year2 <= self.year_e:
-                        scenario=re_mod.search(scenarios, fname).group(1)
-                        fpath=self.WDA_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' + member + '/' + self.comp + '/proc/tseries/' + self.tfreq + '/' + fname
-                        # print(fpath)
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.WDA_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                        )
                         WDA_filtered_files.append(fpath)
+    
             WDA_ens_files.append(WDA_filtered_files)
+    
         WDA_file_list.append(WDA_ens_files)
-        self.WDA_file_list=WDA_file_list
+        self.WDA_file_list = WDA_file_list
     
 
-    def LE_path_load(self, var):
+    def LE_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
         # LE path check
         self.LE_rootdir = '/proj/jedwards/archive'
         scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
-        command='ls ' + self.LE_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-6'
+        command = 'ls ' + self.LE_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-6'
         LE_members_raw = subprocess.check_output(command, shell=True, text=True)
-        self.LE_members= [entry for entry in LE_members_raw.split('\n') if entry]
+        self.LE_members = [entry for entry in LE_members_raw.split('\n') if entry]
         self.LE_ensembles = [ens for ens in range(len(self.LE_members))]
-        LE_file_list=[]
-        LE_ens_files=[]
-        for member in self.LE_members :
-            LE_files=[]    
-            command='ls ' + self.LE_rootdir + '/*' + member + '*/' + self.comp + '/proc/tseries/' + self.tfreq + '| grep \'\.' + self.var + '\.\''
-            # print(command)
+    
+        LE_file_list = []
+        LE_ens_files = []
+    
+        for member in self.LE_members:
+            command = (
+                'ls ' + self.LE_rootdir + '/*' + member + '*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
             LE_files_raw = subprocess.check_output(command, shell=True, text=True)
-            LE_files= [entry for entry in LE_files_raw.split('\n') if entry]
+            LE_files = [entry for entry in LE_files_raw.split('\n') if entry]
             LE_files = sorted(LE_files)
-            # Filter the files based on your criteria
+    
             LE_filtered_files = []
             for fname in LE_files:
-                # print(fname)  # Debugging: print each file name
-                # match1 = re_mod.search(r'-(\d{4})12', fname)
                 match1 = re_mod.search(r'-(\d{6})', fname)
                 match2 = re_mod.search(r'\.(\d{4})01', fname)
-                # Ensure the regex matches and then check the year range
                 if match1 and match2:
                     year1 = int(match1.group(1)[0:4])
                     year2 = int(match2.group(1))
                     if year1 > self.year_s and year2 <= self.year_e:
-                        scenario=re_mod.search(scenarios, fname).group(1)
-                        fpath=self.LE_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' + member + '/' + self.comp + '/proc/tseries/' + self.tfreq + '/' + fname
-                        # print(fpath)
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.LE_rootdir + '/' + 'b.e21.' + scenario + '.' +
+                            self.resol + '.' + member + '/' + self.comp +
+                            '/proc/tseries/' + tfreq + '/' + fname
+                        )
                         LE_filtered_files.append(fpath)
+    
             LE_ens_files.append(LE_filtered_files)
+    
         LE_file_list.append(LE_ens_files)
-        self.LE_file_list=LE_file_list
+        self.LE_file_list = LE_file_list
 
 
     def OBS_path_load(self, var):
@@ -302,8 +332,20 @@ class CESM2_config:
                 self.OBS_var='precip'  # GPCC
                 self.OBS_dataname='GPCC'
                 self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'monthly_reg_' + self.model[:3]
-            case 'PSL':
-                self.OBS_var='msl'
+            case 'U':
+                self.OBS_var='u10'
+                self.OBS_dataname='ERA5'
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + self.OBS_var + '/' + 'monthly_reg_' + self.model[:3]
+            case 'UBOT':
+                self.OBS_var='u10'
+                self.OBS_dataname='ERA5'
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + self.OBS_var + '/' + 'monthly_reg_' + self.model[:3]
+            case 'V':
+                self.OBS_var='v10'
+                self.OBS_dataname='ERA5'
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + self.OBS_var + '/' + 'monthly_reg_' + self.model[:3]
+            case 'VBOT':
+                self.OBS_var='v10'
                 self.OBS_dataname='ERA5'
                 self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + self.OBS_var + '/' + 'monthly_reg_' + self.model[:3]
             case 'Z200':
@@ -325,17 +367,22 @@ class CESM2_config:
             case 'SSH':
                 self.OBS_var='sla'
                 self.OBS_dataname='CMEMS'
-                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + self.OBS_var + '/' + 'monthly_reg_' + self.model[:3]  
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + self.OBS_var + '/' + 'monthly_reg_' + self.model[:3]
             case 'TS':
                 self.OBS_var='t2m'  #ERA5
                 # self.OBS_dataname='ERA5'
                 self.OBS_dataname='CRU_TS'
                 self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'monthly_reg_' + self.model[:3]  
             case 'TREFHT':
-                self.OBS_var='t2m'  #ERA5
+                # self.OBS_var='t2m'  #ERA5
+                self.OBS_var='tmp'  #CRU_TS
                 # self.OBS_dataname='SMYLE'
                 self.OBS_dataname='CRU_TS'
                 self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'monthly_reg_' + self.model[:3]  
+            case 'spChl':
+                self.OBS_var='chlor_a'
+                self.OBS_dataname='OC_CCI'
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'monthly_reg_' + self.model[:3]
             case 'sumChl':
                 self.OBS_var='chlor_a'
                 self.OBS_dataname='OC_CCI'
@@ -346,13 +393,14 @@ class CESM2_config:
                 self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + self.OBS_var + '/' + 'monthly_reg_' + self.model[:3]                  
             case 'FAREA_BURNED':
                 self.OBS_var='burned_area'; # MODIS Fire_cci v5.1, AVHRR-LTDR
-                # self.OBS_dataname='MODIS'
-                self.OBS_dataname='AVHRR'
-                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'AVHRR-LTDR' + '/' + 'monthly_reg_' + self.model[:3]                  
+                self.OBS_dataname='MODIS'
+                # self.OBS_dataname='AVHRR'
+                # self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'AVHRR-LTDR' + '/' + 'monthly_reg_' + self.model[:3]  
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'burned_area' + '/' + 'monthly_reg_' + self.model[:3] 
             case 'COL_FIRE_CLOSS':
                 self.OBS_var='C' # GFED
                 self.OBS_dataname='GFED'
-                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'FIRE_CLOSS' + '/' + 'monthly_reg_' + self.model[:3]                                  
+                self.OBS_mondir= self.OBS_rootdir + '/' +  self.OBS_dataname + '/' + 'FIRE_CLOSS' + '/' + 'monthly_reg_' + self.model[:3]                          
             case 'photoC_TOT_zint':
                 self.OBS_var='PP' #Globcolour
                 self.OBS_dataname='CMEMS'
