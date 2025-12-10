@@ -1,0 +1,29 @@
+fit_XRO_ann_train = XRO_ann.fit_matrix(obs_XRO_ds.sel(time=slice_train), maskNT=['T2', 'TH'], maskNH=['T2'], maskb=['IOD'])
+
+XRO_ann_insample_fcst = XRO_ann.reforecast(fit_ds=fit_XRO_ann_train, init_ds=obs_XRO_ds.sel(time=slice_verif), n_month=24, ncopy=1, noise_type='zero')
+
+acc_XRO_ann_insample = calc_forecast_skill(XRO_ann_insample_fcst, obs_XRO_ds.sel(time=slice_verif), 
+                                          metric='acc', is_mv3=True, by_month=True, verify_periods=slice('1998-01', '2024-12'))
+
+rmse_XRO_ann_insample = calc_forecast_skill(XRO_ann_insample_fcst, obs_XRO_ds.sel(time=slice_verif), 
+                                           metric='rmse', is_mv3=True, by_month=True, verify_periods=slice('1998-01', '2024-12'))
+
+fit_NRO_ann_train = XRO_ann.fit_matrix(obs_NRO_ds.sel(time=slice_train), maskNT=['T2'], maskNH=['T2'])
+NRO_ann_insample_fcst = XRO_ann.reforecast(fit_ds=fit_NRO_ann_train, init_ds=obs_NRO_ds.sel(time=slice_verif), 
+                                          n_month=24, ncopy=1, noise_type='zero')
+
+acc_NRO_ann_insample = calc_forecast_skill(NRO_ann_insample_fcst, obs_NRO_ds.sel(time=slice_verif), 
+                                          metric='acc', is_mv3=True, by_month=True, verify_periods=slice('1998-01', '2024-12'))
+rmse_NRO_ann_insample = calc_forecast_skill(NRO_ann_insample_fcst, obs_NRO_ds.sel(time=slice_verif), 
+                                           metric='rmse', is_mv3=True, by_month=True, verify_periods=slice('1998-01', '2024-12'))
+
+# fit_LRO_NPP = XRO_ann.fit_matrix(obs_NRO_ds, maskNT=[], maskNH=[])
+
+fit_LRO_ann_train = XRO_ann.fit_matrix(obs_NRO_ds.sel(time=slice_train), maskNT=[], maskNH=[])
+LRO_ann_insample_fcst = XRO_ann.reforecast(fit_ds=fit_LRO_ann_train, init_ds=obs_NRO_ds.sel(time=slice_verif), 
+                                          n_month=24, ncopy=1, noise_type='zero')
+
+acc_LRO_ann_insample = calc_forecast_skill(LRO_ann_insample_fcst, obs_NRO_ds.sel(time=slice_verif), 
+                                          metric='acc', is_mv3=True, by_month=True, verify_periods=slice('1998-01', '2024-12'))
+rmse_LRO_ann_insample = calc_forecast_skill(LRO_ann_insample_fcst, obs_NRO_ds.sel(time=slice_verif), 
+                                           metric='rmse', is_mv3=True, by_month=True, verify_periods=slice('1998-01', '2024-12'))

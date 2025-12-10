@@ -22,26 +22,73 @@ class CESM2_NWP_config:
         filtered_dict = {k: v for k, v in self.__dict__.items() if k not in ('ODA_file_list', 'LE_file_list', 'ADA_file_list', 'OBS_file_list')}
         pprint(filtered_dict, width=1)
 
-    def setvar(self, var):
-        self.var=var
-        df = pd.read_csv('/mnt/lustre/proj/earth.system.predictability/LENS2/LENS2_output_200129.csv', header=None, on_bad_lines='skip')
-        #filtered_row = df[df[3].str.contains(self.var, regex=True, na=False)]
+    # def setvar(self, var):
+    #     self.var=var
+    #     df = pd.read_csv('/mnt/lustre/proj/earth.system.predictability/LENS2/LENS2_output_200129.csv', header=None, on_bad_lines='skip')
+    #     #filtered_row = df[df[3].str.contains(self.var, regex=True, na=False)]
+    #     filtered_row = df[df[3].str.match(self.var)]
+    #     self.comp = filtered_row.iloc[0, 0]      
+    #     self.long_name = ''.join(filtered_row.iloc[0, 5])
+    #     self.unit = filtered_row.iloc[0, 6]       
+    #     self.dimension = filtered_row.iloc[0, 7]  
+    #     self.ndim = len(self.dimension.split())
+    #     self.tfreq='month_1'
+    #     # set component
+    #     if self.comp=='ocn':
+    #         self.model='pop.h'
+    #     elif self.comp=='ice':
+    #         self.model='cice.h'
+    #     elif self.comp=='atm':
+    #         self.model='cam.h0'
+    #     elif self.comp=='lnd':
+    #         self.model='clm2.h0'
+    def setvar(self, var, comp=None):
+        """
+        Set variable metadata.
+        If comp is provided manually, that component is used directly
+        (skipping CSV lookup for comp).
+        """
+        import pandas as pd
+    
+        self.var = var
+    
+        # Read CSV
+        df = pd.read_csv(
+            '/mnt/lustre/proj/earth.system.predictability/LENS2/LENS2_output_200129.csv',
+            header=None, on_bad_lines='skip'
+        )
+    
+        # Find variable info row
         filtered_row = df[df[3].str.match(self.var)]
-        self.comp = filtered_row.iloc[0, 0]      
+    
+        if filtered_row.empty:
+            raise ValueError(f"Variable '{self.var}' not found in CSV.")
+    
+        # ✅ Use user-provided comp if given, else from CSV
+        if comp is not None:
+            self.comp = comp
+        else:
+            self.comp = filtered_row.iloc[0, 0]
+    
+        # Extract remaining metadata
         self.long_name = ''.join(filtered_row.iloc[0, 5])
-        self.unit = filtered_row.iloc[0, 6]       
-        self.dimension = filtered_row.iloc[0, 7]  
+        self.unit = filtered_row.iloc[0, 6]
+        self.dimension = filtered_row.iloc[0, 7]
         self.ndim = len(self.dimension.split())
-        self.tfreq='month_1'
-        # set component
-        if self.comp=='ocn':
-            self.model='pop.h'
-        elif self.comp=='ice':
-            self.model='cice.h'
-        elif self.comp=='atm':
-            self.model='cam.h0'
-        elif self.comp=='lnd':
-            self.model='clm2.h0'
+        self.tfreq = 'month_1'
+    
+        # Set model type based on component
+        if self.comp == 'ocn':
+            self.model = 'pop.h'
+        elif self.comp == 'ice':
+            self.model = 'cice.h'
+        elif self.comp == 'atm':
+            self.model = 'cam.h0'
+        elif self.comp == 'lnd':
+            self.model = 'clm2.h0'
+        else:
+            raise ValueError(f"Unknown component: {self.comp}")
+
        
     def ODA_path_load(self, var):
         # ODA path check
@@ -57,13 +104,16 @@ class CESM2_NWP_config:
         ODA_ens_files=[]
         for member in self.ODA_members :
             ODA_files=[]    
-            command='ls ' + self.ODA_rootdir + '/*' + member + '*/' + self.comp + '/' +  '| grep \'\.' + self.var + '\.\''
+            # command='ls ' + self.ODA_rootdir + '/*' + member + '*/' + self.comp + '/' +  '| grep \'\.' + self.var + '\.\''
+            command = ('ls ' + self.ODA_rootdir + '/*' + member + '*/' + self.comp + '/' +
+                        " | grep -E '\\." + self.var + "\\.|_" + self.var + "_b\.'")
             # print(command)
             ODA_files_raw = subprocess.check_output(command, shell=True, text=True)
             ODA_files= [entry for entry in ODA_files_raw.split('\n') if entry]
             ODA_files = sorted(ODA_files)
             # Filter the files based on your criteria
             ODA_filtered_files = []
+          
             for fname in ODA_files:
                 # print(fname)  # Debugging: print each file name
                 match1 = re_mod.search(r'-(\d{4})\d{2}.nc', fname)
@@ -78,8 +128,9 @@ class CESM2_NWP_config:
                         fpath=self.ODA_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' + member + '/' + self.comp + '/' + fname
                         # print(fpath)
                         ODA_filtered_files.append(fpath)
-                pattern = r"\.pop\.h\.\d{4}-\d{2}\.nc$"
+                pattern = r"\.pop\.h\.\d{4}-\d{2}\.nc"
                 if re_mod.search(pattern, fname):
+                    fpath=self.ODA_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' + member + '/' + self.comp + '/' + fname
                     ODA_filtered_files.append(fpath)
             ODA_ens_files.append(ODA_filtered_files)
         ODA_file_list.append(ODA_ens_files)
@@ -122,6 +173,110 @@ class CESM2_NWP_config:
         LE_file_list.append(LE_ens_files)
         self.LE_file_list=LE_file_list
 
+    def ADA_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        # ADA path check
+        # self.ADA_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_ATM_timeseries/archive'
+        self.ADA_rootdir = '/mnt/lustre/proj/kimyy/tr_sysong/fld/ATM_TEST/EXP_ALL/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.ADA_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        ADA_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.ADA_members = [entry for entry in ADA_members_raw.split('\n') if entry]
+        self.ADA_ensembles = [ens for ens in range(len(self.ADA_members))]
+    
+        ADA_file_list = []
+        ADA_ens_files = []
+    
+        for member in self.ADA_members:
+            command = (
+                'ls ' + self.ADA_rootdir + '/*' + member + '*/' + self.comp +
+                '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            ADA_files_raw = subprocess.check_output(command, shell=True, text=True)
+            ADA_files = [entry for entry in ADA_files_raw.split('\n') if entry]
+            ADA_files = sorted(ADA_files)
+    
+            ADA_filtered_files = []
+            for fname in ADA_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.ADA_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp +  '/' + fname
+                        )
+                        ADA_filtered_files.append(fpath)
+    
+            ADA_ens_files.append(ADA_filtered_files)
+    
+        ADA_file_list.append(ADA_ens_files)
+        self.ADA_file_list = ADA_file_list
+    
+    def WDA_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        # WDA path check
+        # self.WDA_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_ATM_timeseries/archive'
+        self.WDA_rootdir = '/mnt/lustre/proj/kimyy/tr_sysong/fld/ATM_TEST/EXP_ATM/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.WDA_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        WDA_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.WDA_members = [entry for entry in WDA_members_raw.split('\n') if entry]
+        self.WDA_ensembles = [ens for ens in range(len(self.WDA_members))]
+    
+        WDA_file_list = []
+        WDA_ens_files = []
+    
+        for member in self.WDA_members:
+            command = (
+                'ls ' + self.WDA_rootdir + '/*' + member + '*/' + self.comp +
+                '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            WDA_files_raw = subprocess.check_output(command, shell=True, text=True)
+            WDA_files = [entry for entry in WDA_files_raw.split('\n') if entry]
+            WDA_files = sorted(WDA_files)
+    
+            WDA_filtered_files = []
+            for fname in WDA_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.WDA_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp +  '/' + fname
+                        )
+                        WDA_filtered_files.append(fpath)
+    
+            WDA_ens_files.append(WDA_filtered_files)
+    
+        WDA_file_list.append(WDA_ens_files)
+        self.WDA_file_list = WDA_file_list
+        
 
     def OBS_path_load(self, var):
         # set varname in observation file
