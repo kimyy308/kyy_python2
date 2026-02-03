@@ -37,7 +37,7 @@ class CESM2_config:
 
         self.tfreq='month_1' # temporary setting 
 
-        if self.var == "TAUX" or self.var == "TAUY" or self.var == "NO3" or self.var == "TEMP" or self.var == "PD" or self.var == "PV":
+        if self.var == "TAUX" or self.var == "TAUY" or self.var == "NO3" or self.var == "TEMP" or self.var == "PD" or self.var == "PV" or self.var == "Q":
             self.comp = "ocn"
             self.tfreq='month_1'
 
@@ -59,54 +59,6 @@ class CESM2_config:
                 self.model='cam.h1'
             if self.comp=='ocn':
                 self.model='pop.h'
-    
-    def HCST_path_load(self, var, tfreq=None, model=None):
-        tfreq = tfreq if tfreq is not None else self.tfreq
-        model = model if model is not None else self.model
-    
-        self.HCST_rootdir = '/mnt/lustre/proj/earth.system.predictability/HCST_EXP_timeseries/archive'
-        command = 'ls ' + self.HCST_rootdir + '| grep f09_g17 | cut -d ''.'' -f 3-4'
-        HCST_members_raw = subprocess.check_output(command, shell=True, text=True)
-        self.HCST_members = [entry for entry in HCST_members_raw.split('\n') if entry]
-        self.HCST_ensembles = [ens for ens in range(len(self.HCST_members))]
-        self.HCST_file_list = []
-    
-        HCST_iy_files = []
-        for iyear in range(self.year_s, self.year_e + 1):
-            HCST_ens_files = []
-            for member in self.HCST_members:
-                HCST_casename_M = self.resol + '.hcst.' + member
-                HCST_casename = HCST_casename_M + '_i' + str(iyear)
-                # command = ( 
-                #     'ls ' + self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' + 
-                #     self.comp + '/proc/tseries/' + tfreq + '| grep \'.' + var + '\.'' + '| grep \'' + model + '\''
-                # )
-                command = (
-                    'ls ' + self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' +
-                    self.comp + '/proc/tseries/' + tfreq + "| grep '." + var + ".' | grep '" + model + "'"
-                )
-                HCST_files_raw = subprocess.check_output(command, shell=True, text=True)
-                HCST_files = [entry for entry in HCST_files_raw.split('\n') if entry]
-                HCST_files = sorted(HCST_files)
-    
-                HCST_filtered_files = []
-                for fname in HCST_files:
-                    match1 = re_mod.search(r'-(\d{4})12', fname)
-                    match2 = re_mod.search(r'\.(\d{4})01', fname)
-                    if match1 and match2:
-                        year1 = int(match1.group(1))
-                        year2 = int(match2.group(1))
-                        if year1 >= self.year_s and year2 <= self.year_e:
-                            fpath = (
-                                self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' +
-                                self.comp + '/proc/tseries/' + tfreq + '/' + fname
-                            )
-                            HCST_filtered_files.append(fpath)
-                HCST_ens_files.append(HCST_filtered_files)                
-            HCST_iy_files.append(HCST_ens_files)
-    
-        self.HCST_file_list = HCST_iy_files
-
     
     def ODA_path_load(self, var, tfreq=None, model=None):
         # Use provided tfreq and model if given; otherwise, default to class attributes
@@ -457,8 +409,606 @@ class CESM2_config:
         OBS_file_list.append(OBS_ens_files)
         self.OBS_file_list=OBS_file_list
 
+    def A_F_REF1_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
     
+        # A_F_REF1 path check
+        self.A_F_REF1_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_FLUX_REF1_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.A_F_REF1_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        A_F_REF1_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.A_F_REF1_members = [entry for entry in A_F_REF1_members_raw.split('\n') if entry]
+        self.A_F_REF1_ensembles = [ens for ens in range(len(self.A_F_REF1_members))]
+    
+        A_F_REF1_file_list = []
+        A_F_REF1_ens_files = []
+    
+        for member in self.A_F_REF1_members:
+            command = (
+                'ls ' + self.A_F_REF1_rootdir + '/*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            A_F_REF1_files_raw = subprocess.check_output(command, shell=True, text=True)
+            A_F_REF1_files = [entry for entry in A_F_REF1_files_raw.split('\n') if entry]
+            A_F_REF1_files = sorted(A_F_REF1_files)
+    
+            A_F_REF1_filtered_files = []
+            for fname in A_F_REF1_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.A_F_REF1_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        A_F_REF1_filtered_files.append(fpath)
+    
+            A_F_REF1_ens_files.append(A_F_REF1_filtered_files)
+    
+        A_F_REF1_file_list.append(A_F_REF1_ens_files)
+        self.A_F_REF1_file_list = A_F_REF1_file_list
 
+#-----------------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------  #-----------------------------------------------------------------------------------------------------
+    
+    def A_F_REF2_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        # A_F_REF2 path check
+        self.A_F_REF2_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_FLUX_REF2_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.A_F_REF2_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        A_F_REF2_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.A_F_REF2_members = [entry for entry in A_F_REF2_members_raw.split('\n') if entry]
+        self.A_F_REF2_ensembles = [ens for ens in range(len(self.A_F_REF2_members))]
+    
+        A_F_REF2_file_list = []
+        A_F_REF2_ens_files = []
+    
+        for member in self.A_F_REF2_members:
+            command = (
+                'ls ' + self.A_F_REF2_rootdir + '/*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            A_F_REF2_files_raw = subprocess.check_output(command, shell=True, text=True)
+            A_F_REF2_files = [entry for entry in A_F_REF2_files_raw.split('\n') if entry]
+            A_F_REF2_files = sorted(A_F_REF2_files)
+    
+            A_F_REF2_filtered_files = []
+            for fname in A_F_REF2_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.A_F_REF2_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        A_F_REF2_filtered_files.append(fpath)
+    
+            A_F_REF2_ens_files.append(A_F_REF2_filtered_files)
+    
+        A_F_REF2_file_list.append(A_F_REF2_ens_files)
+        self.A_F_REF2_file_list = A_F_REF2_file_list
+
+#-----------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------- #-----------------------------------------------------------------------------------------------------
+
+    def A_F_DUST_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        # A_F_DUST path check
+        self.A_F_DUST_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_FLUX_DUST_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.A_F_DUST_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        A_F_DUST_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.A_F_DUST_members = [entry for entry in A_F_DUST_members_raw.split('\n') if entry]
+        self.A_F_DUST_ensembles = [ens for ens in range(len(self.A_F_DUST_members))]
+    
+        A_F_DUST_file_list = []
+        A_F_DUST_ens_files = []
+    
+        for member in self.A_F_DUST_members:
+            command = (
+                'ls ' + self.A_F_DUST_rootdir + '/*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            A_F_DUST_files_raw = subprocess.check_output(command, shell=True, text=True)
+            A_F_DUST_files = [entry for entry in A_F_DUST_files_raw.split('\n') if entry]
+            A_F_DUST_files = sorted(A_F_DUST_files)
+    
+            A_F_DUST_filtered_files = []
+            for fname in A_F_DUST_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.A_F_DUST_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        A_F_DUST_filtered_files.append(fpath)
+    
+            A_F_DUST_ens_files.append(A_F_DUST_filtered_files)
+    
+        A_F_DUST_file_list.append(A_F_DUST_ens_files)
+        self.A_F_DUST_file_list = A_F_DUST_file_list
+
+
+#-----------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------- #-----------------------------------------------------------------------------------------------------
+
+    def A_F_WIND_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        # A_F_WIND path check
+        self.A_F_WIND_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_FLUX_WIND_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.A_F_WIND_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        A_F_WIND_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.A_F_WIND_members = [entry for entry in A_F_WIND_members_raw.split('\n') if entry]
+        self.A_F_WIND_ensembles = [ens for ens in range(len(self.A_F_WIND_members))]
+    
+        A_F_WIND_file_list = []
+        A_F_WIND_ens_files = []
+    
+        for member in self.A_F_WIND_members:
+            command = (
+                'ls ' + self.A_F_WIND_rootdir + '/*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            A_F_WIND_files_raw = subprocess.check_output(command, shell=True, text=True)
+            A_F_WIND_files = [entry for entry in A_F_WIND_files_raw.split('\n') if entry]
+            A_F_WIND_files = sorted(A_F_WIND_files)
+    
+            A_F_WIND_filtered_files = []
+            for fname in A_F_WIND_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.A_F_WIND_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        A_F_WIND_filtered_files.append(fpath)
+    
+            A_F_WIND_ens_files.append(A_F_WIND_filtered_files)
+    
+        A_F_WIND_file_list.append(A_F_WIND_ens_files)
+        self.A_F_WIND_file_list = A_F_WIND_file_list
+
+
+#-----------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------- #-----------------------------------------------------------------------------------------------------
+
+    def A_F_SOLAR_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        # A_F_SOLAR path check
+        self.A_F_SOLAR_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_FLUX_SOLAR_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.A_F_SOLAR_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        A_F_SOLAR_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.A_F_SOLAR_members = [entry for entry in A_F_SOLAR_members_raw.split('\n') if entry]
+        self.A_F_SOLAR_ensembles = [ens for ens in range(len(self.A_F_SOLAR_members))]
+    
+        A_F_SOLAR_file_list = []
+        A_F_SOLAR_ens_files = []
+    
+        for member in self.A_F_SOLAR_members:
+            command = (
+                'ls ' + self.A_F_SOLAR_rootdir + '/*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            A_F_SOLAR_files_raw = subprocess.check_output(command, shell=True, text=True)
+            A_F_SOLAR_files = [entry for entry in A_F_SOLAR_files_raw.split('\n') if entry]
+            A_F_SOLAR_files = sorted(A_F_SOLAR_files)
+    
+            A_F_SOLAR_filtered_files = []
+            for fname in A_F_SOLAR_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.A_F_SOLAR_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        A_F_SOLAR_filtered_files.append(fpath)
+    
+            A_F_SOLAR_ens_files.append(A_F_SOLAR_filtered_files)
+    
+        A_F_SOLAR_file_list.append(A_F_SOLAR_ens_files)
+        self.A_F_SOLAR_file_list = A_F_SOLAR_file_list
+
+
+#-----------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------- #-----------------------------------------------------------------------------------------------------
+
+    def A_F_WDS_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        # A_F_WDS path check
+        self.A_F_WDS_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_FLUX_WDS_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.A_F_WDS_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        A_F_WDS_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.A_F_WDS_members = [entry for entry in A_F_WDS_members_raw.split('\n') if entry]
+        self.A_F_WDS_ensembles = [ens for ens in range(len(self.A_F_WDS_members))]
+    
+        A_F_WDS_file_list = []
+        A_F_WDS_ens_files = []
+    
+        for member in self.A_F_WDS_members:
+            command = (
+                'ls ' + self.A_F_WDS_rootdir + '/*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            A_F_WDS_files_raw = subprocess.check_output(command, shell=True, text=True)
+            A_F_WDS_files = [entry for entry in A_F_WDS_files_raw.split('\n') if entry]
+            A_F_WDS_files = sorted(A_F_WDS_files)
+    
+            A_F_WDS_filtered_files = []
+            for fname in A_F_WDS_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.A_F_WDS_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        A_F_WDS_filtered_files.append(fpath)
+    
+            A_F_WDS_ens_files.append(A_F_WDS_filtered_files)
+    
+        A_F_WDS_file_list.append(A_F_WDS_ens_files)
+        self.A_F_WDS_file_list = A_F_WDS_file_list
+
+#-----------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------- #-----------------------------------------------------------------------------------------------------
+
+    def A_F_xDUST_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        # A_F_xDUST path check
+        self.A_F_xDUST_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_FLUX_xDUST_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.A_F_xDUST_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        A_F_xDUST_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.A_F_xDUST_members = [entry for entry in A_F_xDUST_members_raw.split('\n') if entry]
+        self.A_F_xDUST_ensembles = [ens for ens in range(len(self.A_F_xDUST_members))]
+    
+        A_F_xDUST_file_list = []
+        A_F_xDUST_ens_files = []
+    
+        for member in self.A_F_xDUST_members:
+            command = (
+                'ls ' + self.A_F_xDUST_rootdir + '/*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            A_F_xDUST_files_raw = subprocess.check_output(command, shell=True, text=True)
+            A_F_xDUST_files = [entry for entry in A_F_xDUST_files_raw.split('\n') if entry]
+            A_F_xDUST_files = sorted(A_F_xDUST_files)
+    
+            A_F_xDUST_filtered_files = []
+            for fname in A_F_xDUST_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.A_F_xDUST_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        A_F_xDUST_filtered_files.append(fpath)
+    
+            A_F_xDUST_ens_files.append(A_F_xDUST_filtered_files)
+    
+        A_F_xDUST_file_list.append(A_F_xDUST_ens_files)
+        self.A_F_xDUST_file_list = A_F_xDUST_file_list
+
+
+
+#-----------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------- #-----------------------------------------------------------------------------------------------------
+
+    def A_F_xWIND_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        # A_F_xWIND path check
+        self.A_F_xWIND_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_FLUX_xWIND_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.A_F_xWIND_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        A_F_xWIND_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.A_F_xWIND_members = [entry for entry in A_F_xWIND_members_raw.split('\n') if entry]
+        self.A_F_xWIND_ensembles = [ens for ens in range(len(self.A_F_xWIND_members))]
+    
+        A_F_xWIND_file_list = []
+        A_F_xWIND_ens_files = []
+    
+        for member in self.A_F_xWIND_members:
+            command = (
+                'ls ' + self.A_F_xWIND_rootdir + '/*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            A_F_xWIND_files_raw = subprocess.check_output(command, shell=True, text=True)
+            A_F_xWIND_files = [entry for entry in A_F_xWIND_files_raw.split('\n') if entry]
+            A_F_xWIND_files = sorted(A_F_xWIND_files)
+    
+            A_F_xWIND_filtered_files = []
+            for fname in A_F_xWIND_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.A_F_xWIND_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        A_F_xWIND_filtered_files.append(fpath)
+    
+            A_F_xWIND_ens_files.append(A_F_xWIND_filtered_files)
+    
+        A_F_xWIND_file_list.append(A_F_xWIND_ens_files)
+        self.A_F_xWIND_file_list = A_F_xWIND_file_list
+
+
+#-----------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------- #-----------------------------------------------------------------------------------------------------
+
+    def A_F_xSOLAR_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        # A_F_xSOLAR path check
+        self.A_F_xSOLAR_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_FLUX_xSOLAR_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.A_F_xSOLAR_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        A_F_xSOLAR_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.A_F_xSOLAR_members = [entry for entry in A_F_xSOLAR_members_raw.split('\n') if entry]
+        self.A_F_xSOLAR_ensembles = [ens for ens in range(len(self.A_F_xSOLAR_members))]
+    
+        A_F_xSOLAR_file_list = []
+        A_F_xSOLAR_ens_files = []
+    
+        for member in self.A_F_xSOLAR_members:
+            command = (
+                'ls ' + self.A_F_xSOLAR_rootdir + '/*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            A_F_xSOLAR_files_raw = subprocess.check_output(command, shell=True, text=True)
+            A_F_xSOLAR_files = [entry for entry in A_F_xSOLAR_files_raw.split('\n') if entry]
+            A_F_xSOLAR_files = sorted(A_F_xSOLAR_files)
+    
+            A_F_xSOLAR_filtered_files = []
+            for fname in A_F_xSOLAR_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.A_F_xSOLAR_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        A_F_xSOLAR_filtered_files.append(fpath)
+    
+            A_F_xSOLAR_ens_files.append(A_F_xSOLAR_filtered_files)
+    
+        A_F_xSOLAR_file_list.append(A_F_xSOLAR_ens_files)
+        self.A_F_xSOLAR_file_list = A_F_xSOLAR_file_list
+
+
+
+#-----------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------- #-----------------------------------------------------------------------------------------------------
+
+    def A_F_xWDS_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        # A_F_xWDS path check
+        self.A_F_xWDS_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_FLUX_xWDS_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.A_F_xWDS_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        A_F_xWDS_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.A_F_xWDS_members = [entry for entry in A_F_xWDS_members_raw.split('\n') if entry]
+        self.A_F_xWDS_ensembles = [ens for ens in range(len(self.A_F_xWDS_members))]
+    
+        A_F_xWDS_file_list = []
+        A_F_xWDS_ens_files = []
+    
+        for member in self.A_F_xWDS_members:
+            command = (
+                'ls ' + self.A_F_xWDS_rootdir + '/*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            A_F_xWDS_files_raw = subprocess.check_output(command, shell=True, text=True)
+            A_F_xWDS_files = [entry for entry in A_F_xWDS_files_raw.split('\n') if entry]
+            A_F_xWDS_files = sorted(A_F_xWDS_files)
+    
+            A_F_xWDS_filtered_files = []
+            for fname in A_F_xWDS_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.A_F_xWDS_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        A_F_xWDS_filtered_files.append(fpath)
+    
+            A_F_xWDS_ens_files.append(A_F_xWDS_filtered_files)
+    
+        A_F_xWDS_file_list.append(A_F_xWDS_ens_files)
+        self.A_F_xWDS_file_list = A_F_xWDS_file_list
+
+
+#-----------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------- #-----------------------------------------------------------------------------------------------------
+
+    def A_F_ALL_path_load(self, var, tfreq=None, model=None):
+        # Use provided tfreq and model if given; otherwise, default to class attributes
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        # A_F_ALL path check
+        self.A_F_ALL_rootdir = '/mnt/lustre/proj/earth.system.predictability/ATM_TEST/EXP_FLUX_ALL_timeseries/archive'
+        scenarios = r'\.(BHISTsmbb|BSSP370smbb)\.'
+        command = 'ls ' + self.A_F_ALL_rootdir + '| grep BHISTsmbb | cut -d ''.'' -f 5-7'
+        A_F_ALL_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.A_F_ALL_members = [entry for entry in A_F_ALL_members_raw.split('\n') if entry]
+        self.A_F_ALL_ensembles = [ens for ens in range(len(self.A_F_ALL_members))]
+    
+        A_F_ALL_file_list = []
+        A_F_ALL_ens_files = []
+    
+        for member in self.A_F_ALL_members:
+            command = (
+                'ls ' + self.A_F_ALL_rootdir + '/*/' + self.comp +
+                '/proc/tseries/' + tfreq + '| grep \'\.' + var + '\.\'' +
+                '| grep \'' + model + '\''
+            )
+            A_F_ALL_files_raw = subprocess.check_output(command, shell=True, text=True)
+            A_F_ALL_files = [entry for entry in A_F_ALL_files_raw.split('\n') if entry]
+            A_F_ALL_files = sorted(A_F_ALL_files)
+    
+            A_F_ALL_filtered_files = []
+            for fname in A_F_ALL_files:
+                if tfreq == 'month_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                elif tfreq == 'day_1':
+                    match1 = re_mod.search(r'-(\d{4})\d{2}31', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+    
+                if match1 and match2:
+                    year1 = int(match1.group(1))
+                    year2 = int(match2.group(1))
+                    if year1 >= self.year_s and year2 <= self.year_e:
+                        scenario = re_mod.search(scenarios, fname).group(1)
+                        fpath = (
+                            self.A_F_ALL_rootdir + '/' + 'b.e21.' + scenario + '.' + self.resol + '.' +
+                            member + '/' + self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                        )
+                        A_F_ALL_filtered_files.append(fpath)
+    
+            A_F_ALL_ens_files.append(A_F_ALL_filtered_files)
+    
+        A_F_ALL_file_list.append(A_F_ALL_ens_files)
+        self.A_F_ALL_file_list = A_F_ALL_file_list
+    
 # usage:
 # abcdd=CESM2_config()
 # abcdd.year_s=1960
