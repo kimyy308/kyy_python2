@@ -1,0 +1,2 @@
+year_stocktake,temp_target_abs,total_emission_budget,ff_emission_budget,reb,ec_cost,ec_reb_diff,ec_overshoot_integral,ec_slope_t1,ec_slope_change,ec_overshoot,ec_curvature,ec_target_year_rel,ec_a,ec_b,ec_c,ec_d
+2025,288.698,828.394,577.755,85.163,0.999,4.270,0.000,-0.558,-0.400,0.000,0.999,13.000,0.010046875492793235,-0.18104552463510934,-0.38658223433332806,13.549277252000003
