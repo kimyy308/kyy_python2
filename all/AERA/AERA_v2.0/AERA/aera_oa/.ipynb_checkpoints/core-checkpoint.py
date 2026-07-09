@@ -29,10 +29,10 @@ import pandas as pd
 import xarray as xr
 from scipy.optimize import curve_fit
 
-from aera import constants
-from aera import utils
-from aera import io
-from aera import emission_curve
+from aera_oa import constants
+from aera_oa import utils
+from aera_oa import io
+from aera_oa import emission_curve
 
 
 def runmean(array, winlen):

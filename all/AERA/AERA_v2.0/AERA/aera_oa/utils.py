@@ -7,7 +7,7 @@ Contains the following important functions:
 - _load_dat_df: Allows to read and assign prescribed input data.
 - get_base_df : A helper function that facilitates the creation of
     the pandas.DataFrame instance which is needed by
-    `aera.core.get_adaptive_emissions`.
+    `aera_oacore.get_adaptive_emissions`.
 """
 
 from pathlib import Path
@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-import aera
+import aera_oa
 
 
 MIN_YEAR = 1751
@@ -28,7 +28,7 @@ def validate_df(df, year_x, model_start_year): # ML
     Args: 
         df (pandas.DataFrame): Template dataframe which can be
             filled with data and then used for the call to
-            `aera.get_adaptive_emissions`.
+            `aera_oaget_adaptive_emissions`.
         year_x (int): Year of the stocktake
         model_start_year (int): Year in which the historical
             simulation (pre-cursor for the adaptive scenario
@@ -89,7 +89,7 @@ def get_base_df(
     repository.
 
     Note: The returned pandas.DataFrame cannot be passed to
-    `aera.core.get_adaptive_emissions` directly!
+    `aera_oacore.get_adaptive_emissions` directly!
     The following steps are still neccessary before calling
     `get_adaptive_emissions`:
     - Fill "OmegaA" column with aragonite saturation state
@@ -104,9 +104,9 @@ def get_base_df(
     Returns:
         df (pandas.DataFrame): Template dataframe which can be
             filled with data and then used for the call to
-            `aera.get_adaptive_emissions`.
+            `aera_oaget_adaptive_emissions`.
     """
-    data_dir = Path(aera.__file__).parent / 'data' # Location where this file was installed as part of AERA package. Take the parent file and go into data.
+    data_dir = Path(aera_oa.__file__).parent / 'data' # Location where this file was installed as part of AERA package. Take the parent file and go into data.
     non_co2_emission_file = data_dir / 'nonco2_emis_ssp126_v3.dat'
     lu_emission_file = data_dir / 'lu_emis_ssp126_bern3d_adj_GCB2020_v1.dat'
     ff_emission_file = data_dir / 'co2_ff_GCP_plus_NDC_v1.dat' # ML

@@ -1,29 +1,23 @@
 from setuptools import setup, find_packages
 
-
 setup(
-    name="aera",
-    version="1.0",
-    packages=find_packages(),
-    # metadata to display on PyPI
-    author="Climate and Environmental Physics, University of Bern",
-    author_email="jens.terhaar@unibe.ch",
-    description=(
-        "Implementation of the AERA algorithm (see Terhaar et al., in review)"),
+    name="aera-oxygen",
+    version="2.1.0",
+    packages=find_packages(include=["aera_oxygen", "aera_oxygen.*"]),
+    author="Yong-Yub Kim / modified from AERA",
+    description="Modified AERA algorithm for oxygen-based adaptive emissions",
     license="CC BY-NC-SA 4.0",
-    keywords="research, science, climate change, mitigation",
-    project_urls={
-        "Source Code": "https://github.com/Jete90/AERA",
-    },
+    keywords="AERA, oxygen, climate change, mitigation",
     package_data={
-        'aera': ['data/*.dat'],
+        "aera_oxygen": ["data/*.dat"],
     },
+    include_package_data=True,
     install_requires=[
-        'numpy',
-        'pandas',
-        'netCDF4',
-        'scipy',
-        'dask[complete]',
-        'xarray',
+        "numpy",
+        "pandas",
+        "netCDF4",
+        "scipy",
+        "dask[complete]",
+        "xarray",
     ],
 )

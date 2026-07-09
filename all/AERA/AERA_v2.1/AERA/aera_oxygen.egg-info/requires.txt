@@ -1,0 +1,6 @@
+numpy
+pandas
+netCDF4
+scipy
+dask[complete]
+xarray

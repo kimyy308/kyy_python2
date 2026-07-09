@@ -6,5 +6,5 @@ emissions , which allow to stabilize global earth
 temperature at a chosen temperature target.
 """
 
-from aera.core import get_adaptive_emissions
-from aera.utils import get_base_df
+from aera_oxygen.core import get_adaptive_emissions
+from aera_oxygen.utils import get_base_df
