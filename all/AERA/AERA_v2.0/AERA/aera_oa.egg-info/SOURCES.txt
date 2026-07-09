@@ -1,6 +1,12 @@
 LICENSE
 README.md
 setup.py
+aera/__init__.py
+aera/constants.py
+aera/core.py
+aera/emission_curve.py
+aera/io.py
+aera/utils.py
 aera_oa/__init__.py
 aera_oa/constants.py
 aera_oa/core.py
