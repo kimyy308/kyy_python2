@@ -1,0 +1,56 @@
+Starting job 1569526 on b5201 on Betzy at Fri Jul 10 17:16:17 CEST 2026
+
+======================================
+Job started at: Fri Jul 10 05:16:21 PM CEST 2026
+Job ID: 1569526
+Node list: b5201
+Working directory: /cluster/home/yongyub/Dropbox/source/python/all/AERA/exp_scripts/AERA_T
+======================================
+Python executable:
+/cluster/home/yongyub/APPS/miniconda/miniconda3/envs/kdask/bin/python
+Python 3.11.4
+[2026-07-10 17:16:38] CASE                 = NSSP126frc2esm_f19_tn14_noresm2.0.9_esm-ssp126-AERA_T_Betzy_20260709
+[2026-07-10 17:16:38] CASEROOT             = /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/cases/NSSP126frc2esm_f19_tn14_noresm2.0.9_esm-ssp126-AERA_T_Betzy_20260709
+[2026-07-10 17:16:38] RUNDIR               = /cluster/work/users/yongyub/noresm/NSSP126frc2esm_f19_tn14_noresm2.0.9_esm-ssp126-AERA_T_Betzy_20260709/run
+[2026-07-10 17:16:38] EXE                  = /cluster/work/users/yongyub/noresm/NSSP126frc2esm_f19_tn14_noresm2.0.9_esm-ssp126-AERA_T_Betzy_20260709/bld/cesm.exe
+[2026-07-10 17:16:38] AERA_SCRIPT          = /cluster/home/yongyub/Dropbox/source/python/all/AERA/exp_scripts/AERA_T/run_AERA_stocktake_Betzy.py
+[2026-07-10 17:16:38] INITIAL_STATE_DAT    = /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/AERA_hist/AERA_T_Betzy/AERA_T_hist_nird_ann_tas_co2_ems_2014.dat
+[2026-07-10 17:16:38] HIST_INPUT_CSV       = /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/AERA_hist/NorESM2-LM_esm-hist_r1i1p1f1_1850-2014_AERA_temp_ff_input.csv
+[2026-07-10 17:16:38] AERA_FUTURE_DIR      = /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/AERA_future/AERA_T_Betzy
+[2026-07-10 17:16:38] EMISSION_TEMPLATE_NC = /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/emissions/AERA/AERA_T_Betzy/emissions-cmip6_CO2_anthro_surface_AERA_T_hist_nird_2015-2019_201401-210112_fv_1.9x2.5.nc
+[2026-07-10 17:16:38] EMISSION_DIR         = /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/emissions/AERA/AERA_T_Betzy
+
+============================================================
+[2026-07-10 17:16:38] AERA cycle test for 2020-2024
+[2026-07-10 17:16:38] YEAR_X = 2019
+============================================================
+[2026-07-10 17:16:38] Running AERA stocktake for YEAR_X=2019
+[2026-07-10 17:18:27] AERA finished for YEAR_X=2019
+
+[2026-07-10 17:18:27] AERA output files:
+-rw-rw-r-- 1 yongyub nn2980k 5.0K Jul 10 17:18 /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/AERA_future/AERA_T_Betzy/AERA_T_Betzy_2019.csv
+-rw-rw-r-- 1 yongyub nn2980k  169 Jul 10 17:18 /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/AERA_future/AERA_T_Betzy/AERA_T_Betzy_2019_emission_nc_path.txt
+-rw-rw-r-- 1 yongyub nn2980k  131 Jul 10 17:18 /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/AERA_future/AERA_T_Betzy/AERA_T_Betzy_2019_next5.csv
+-rw-rw-r-- 1 yongyub nn2980k 5.8K Jul 10 17:18 /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/AERA_future/AERA_T_Betzy/AERA_T_Betzy_ann_tas_co2_ems_2019.dat
+-rw-rw-r-- 1 yongyub nn2980k  125 Jul 10 17:17 /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/AERA_future/AERA_T_Betzy/AERA_T_Betzy_model_tas_2015-2019.csv
+-rw-rw-r-- 1 yongyub nn2980k 7.3K Jul 10 17:18 /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/AERA_future/AERA_T_Betzy/AERA_T_Betzy_state_2019.csv
+-rw-r--r-- 1 yongyub nn2980k  56M Jul 10 17:18 /cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/emissions/AERA/AERA_T_Betzy/emissions-cmip6_CO2_anthro_surface_AERA_T_Betzy_2020-2024_201401-210112_fv_1.9x2.5.nc
+
+[2026-07-10 17:18:27] Next-5 emissions:
+year,ff_emission
+2020,9.608938871472597
+2021,9.61684308557819
+2022,9.554981623292075
+2023,9.520337868956586
+2024,9.515464619914052
+
+[2026-07-10 17:18:27] Emission netCDF:
+/cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/emissions/AERA/AERA_T_Betzy/emissions-cmip6_CO2_anthro_surface_AERA_T_Betzy_2020-2024_201401-210112_fv_1.9x2.5.nc
+
+============================================================
+[2026-07-10 17:18:27] AERA-only test completed successfully.
+Job finished at: Fri Jul 10 05:18:27 PM CEST 2026
+============================================================
+
+
+Job 1569526 completed at Fri Jul 10 17:18:27 CEST 2026
