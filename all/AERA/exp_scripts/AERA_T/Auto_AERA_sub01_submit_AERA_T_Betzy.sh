@@ -7,8 +7,8 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=16G
-#SBATCH --output=AERA_T_prep_%j.out
-#SBATCH --error=AERA_T_prep_%j.err
+#SBATCH --output=/cluster/projects/nn2980k/yongyub/NORESM/NorESM2/logs/AERA_T_Betzy/aera_jobs/AERA_T_prep_%j.out
+#SBATCH --error=/cluster/projects/nn2980k/yongyub/NORESM/NorESM2/logs/AERA_T_Betzy/aera_jobs/AERA_T_prep_%j.err
 #SBATCH --export=ALL
 
 set -euo pipefail
@@ -29,7 +29,7 @@ die () {
 usage () {
     cat << EOF
 Usage:
-  sbatch submit_AERA_T_Betzy_AERAjob.sh --year-x YEAR [options]
+  sbatch Auto_AERA_sub01_submit_AERA_T_Betzy.sh --year-x YEAR [options]
 
 Required:
   --year-x YEAR
@@ -42,11 +42,12 @@ Optional:
   --future-output-dir DIR
   --emission-output-dir DIR
   --emission-template-nc FILE
+  --log-root DIR
   --skip-namelist-update
   --skip-preview
 
 Example:
-  sbatch submit_AERA_T_Betzy_AERAjob.sh --year-x 2019
+  sbatch Auto_AERA_sub01_submit_AERA_T_Betzy.sh --year-x 2019
 EOF
 }
 
@@ -73,6 +74,8 @@ HIST_INPUT_CSV="/cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/AERA_hist
 EMISSION_DIR="/cluster/projects/nn2980k/yongyub/NORESM/NorESM2/input/emissions/AERA/AERA_T_Betzy"
 
 EMISSION_TEMPLATE_NC="${EMISSION_DIR}/emissions-cmip6_CO2_anthro_surface_AERA_T_hist_nird_2015-2019_201401-210112_fv_1.9x2.5.nc"
+
+LOG_ROOT="/cluster/projects/nn2980k/yongyub/NORESM/NorESM2/logs/AERA_T_Betzy"
 
 SKIP_NAMELIST_UPDATE="FALSE"
 SKIP_PREVIEW="FALSE"
@@ -114,6 +117,10 @@ while [[ $# -gt 0 ]]; do
             EMISSION_TEMPLATE_NC="$2"
             shift 2
             ;;
+        --log-root)
+            LOG_ROOT="$2"
+            shift 2
+            ;;
         --skip-namelist-update)
             SKIP_NAMELIST_UPDATE="TRUE"
             shift 1
@@ -150,17 +157,30 @@ if [[ -z "${CAM_HIST_DIR}" ]]; then
     CAM_HIST_DIR="${ARCHIVE_ROOT}/${CASE}/atm/hist"
 fi
 
-WRAPPER_WORK="${CASEROOT}/AERA_wrapper_work"
-LOGDIR="${WRAPPER_WORK}/logs"
-MARKER_DIR="${WRAPPER_WORK}/markers"
+LOGDIR="${LOG_ROOT}/aera_internal"
+MARKER_DIR="${LOG_ROOT}/markers"
+LOCKDIR="${LOG_ROOT}/locks"
+BACKUP_DIR="${LOG_ROOT}/backups"
+JOB_WORK_DIR="${LOG_ROOT}/aera_work"
 
-mkdir -p "${WRAPPER_WORK}" "${LOGDIR}" "${MARKER_DIR}" "${AERA_FUTURE_DIR}" "${EMISSION_DIR}"
+mkdir -p \
+    "${LOG_ROOT}" \
+    "${LOGDIR}" \
+    "${MARKER_DIR}" \
+    "${LOCKDIR}" \
+    "${BACKUP_DIR}" \
+    "${JOB_WORK_DIR}" \
+    "${AERA_FUTURE_DIR}" \
+    "${EMISSION_DIR}"
 
 RUN_START=$((YEAR_X + 1))
 RUN_END=$((YEAR_X + 5))
 SEG_START=$((YEAR_X - 4))
 SEG_END="${YEAR_X}"
 TAG="${RUN_START}-${RUN_END}"
+
+# Avoid creating accidental relative-path logs in the git-managed script directory.
+cd "${JOB_WORK_DIR}"
 
 # ============================================================
 # Python environment
@@ -195,6 +215,10 @@ echo "[$(timestamp)] HIST_INPUT_CSV        = ${HIST_INPUT_CSV}"
 echo "[$(timestamp)] AERA_FUTURE_DIR       = ${AERA_FUTURE_DIR}"
 echo "[$(timestamp)] EMISSION_TEMPLATE_NC  = ${EMISSION_TEMPLATE_NC}"
 echo "[$(timestamp)] EMISSION_DIR          = ${EMISSION_DIR}"
+echo "[$(timestamp)] LOG_ROOT              = ${LOG_ROOT}"
+echo "[$(timestamp)] LOGDIR                = ${LOGDIR}"
+echo "[$(timestamp)] MARKER_DIR            = ${MARKER_DIR}"
+echo "[$(timestamp)] BACKUP_DIR            = ${BACKUP_DIR}"
 echo "[$(timestamp)] SKIP_NAMELIST_UPDATE  = ${SKIP_NAMELIST_UPDATE}"
 echo "[$(timestamp)] SKIP_PREVIEW          = ${SKIP_PREVIEW}"
 
@@ -227,7 +251,7 @@ fi
 # ============================================================
 # Avoid duplicate AERA job for the same stocktake year
 # ============================================================
-LOCKFILE="${WRAPPER_WORK}/${CASE}.AERA_YEARX${YEAR_X}.lock"
+LOCKFILE="${LOCKDIR}/${CASE}.AERA_YEARX${YEAR_X}.lock"
 exec 9>"${LOCKFILE}"
 flock -n 9 || die "Another AERA job for YEAR_X=${YEAR_X} seems to be running."
 
@@ -298,7 +322,6 @@ echo
 echo "[$(timestamp)] Emission netCDF:"
 echo "${EMISSION_NC}"
 
-
 # ============================================================
 # Prepare the case for the next NorESM run through case.submit
 # ============================================================
@@ -330,6 +353,7 @@ if [[ "${SKIP_NAMELIST_UPDATE}" == "FALSE" ]]; then
     export EMISSION_NC
     export EMISSION_TEMPLATE_NC
     export SLURM_JOB_ID
+    export BACKUP_DIR
 
     python - << 'PYEOF'
 from pathlib import Path
@@ -351,30 +375,35 @@ if not user_nl_cam.exists():
 text = user_nl_cam.read_text()
 original = text
 
+# If user_nl_cam already points to the new emission file, this is success.
+if new_file in text or Path(new_file).name in text:
+    print("user_nl_cam already contains the new emission file.")
+    print(f"New emission file: {new_file}")
+    raise SystemExit(0)
+
 # Match any AERA-style CO2 anthropogenic surface emission file.
 pattern = re.compile(
     r'[/A-Za-z0-9._-]*emissions-cmip6_CO2_anthro_surface_[A-Za-z0-9._-]+_[0-9]{4}-[0-9]{4}_201401-210112_fv_1\.9x2\.5\.nc'
 )
 
-# First replace exact old template path/name if present.
+# Replace exact old template path/name if present.
 text = text.replace(old_file, new_file)
 text = text.replace(Path(old_file).name, new_file)
 
-# Then replace any previous AERA emission filename if present.
+# Replace any previous AERA emission filename if present.
 text = pattern.sub(new_file, text)
 
 if text == original:
-    print("ERROR: No existing CO2 emission filename was found in user_nl_cam.")
-    print("You need to check the exact CAM namelist variable once.")
-    print("")
-    print("Try:")
-    print(f"  grep -n 'emissions-cmip6_CO2_anthro_surface' {user_nl_cam}")
-    print("")
-    print("Also check generated namelists:")
-    print(f"  grep -R 'emissions-cmip6_CO2_anthro_surface' {caseroot}/CaseDocs")
-    raise SystemExit(1)
+    raise SystemExit(
+        "ERROR: user_nl_cam does not contain a replaceable CO2 emission filename, "
+        "and it does not already contain the new emission file. "
+        "Check co2flux_fuel_file manually."
+    )
 
-backup = user_nl_cam.with_name(user_nl_cam.name + f".bak_YEARX{year_x}_{jobid}")
+backup_dir = Path("/cluster/projects/nn2980k/yongyub/NORESM/NorESM2/logs/AERA_T_Betzy/backups")
+backup_dir.mkdir(parents=True, exist_ok=True)
+
+backup = backup_dir / f"user_nl_cam.bak_YEARX{year_x}_{jobid}"
 shutil.copy2(user_nl_cam, backup)
 user_nl_cam.write_text(text)
 
@@ -382,7 +411,6 @@ print(f"Patched user_nl_cam: {user_nl_cam}")
 print(f"Backup             : {backup}")
 print(f"New emission file  : {new_file}")
 PYEOF
-
     if [[ "${SKIP_PREVIEW}" == "FALSE" ]]; then
         echo "[$(timestamp)] Running preview_namelists for verification"
 
@@ -432,3 +460,4 @@ echo "============================================================"
 echo "[$(timestamp)] AERA preparation job completed successfully."
 echo "Job finished at: $(date)"
 echo "============================================================"
+

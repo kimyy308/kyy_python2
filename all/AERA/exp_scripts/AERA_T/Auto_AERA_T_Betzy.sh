@@ -16,7 +16,8 @@ AERA_JOB_SCRIPT="${HOME}/Dropbox/source/python/all/AERA/exp_scripts/AERA_T/Auto_
 
 # First stocktake year.
 # If the model has already completed 2015-2019, this should be 2019.
-FIRST_STOCKTAKE_YEAR=2019
+#FIRST_STOCKTAKE_YEAR=2019
+FIRST_STOCKTAKE_YEAR=2024
 
 # Final model year to reach.
 # Example:
@@ -28,9 +29,8 @@ FINAL_MODEL_YEAR=2029
 STOCKTAKE_STEP=5
 
 # Extra arguments passed to case.submit.
-# Do not pass partition here unless necessary, because case.run and case.st_archive
-# may use different partitions from their generated scripts.
-CASE_SUBMIT_BATCH_ARGS="-A nn2980k --time=48:00:00"
+# Output/error paths are added automatically by submit_case_run().
+CASE_SUBMIT_BATCH_ARGS="-A nn2980k "
 
 # Polling intervals in seconds.
 POLL_JOB=60
@@ -40,11 +40,33 @@ POLL_ARCHIVE=60
 # 21600 sec = 6 hours.
 ARCHIVE_WAIT_MAX=21600
 
-# Autoscript log directory.
-AUTO_LOG_DIR="${CASEROOT}/AERA_wrapper_work/autoscript_logs"
-mkdir -p "${AUTO_LOG_DIR}"
+# ============================================================
+# Log / work directories
+# ============================================================
+
+LOG_ROOT="/cluster/projects/nn2980k/yongyub/NORESM/NorESM2/logs/AERA_T_Betzy"
+
+AUTO_LOG_DIR="${LOG_ROOT}/autoscript"
+AERA_SLURM_LOG_DIR="${LOG_ROOT}/aera_jobs"
+MODEL_SLURM_LOG_DIR="${LOG_ROOT}/model_jobs"
+CASE_SUBMIT_LOG_DIR="${LOG_ROOT}/case_submit"
+RUN_WORK_DIR="${LOG_ROOT}/autoscript_work"
+MARKER_DIR="${LOG_ROOT}/markers"
+LOCKDIR="${LOG_ROOT}/locks"
+
+mkdir -p \
+    "${AUTO_LOG_DIR}" \
+    "${AERA_SLURM_LOG_DIR}" \
+    "${MODEL_SLURM_LOG_DIR}" \
+    "${CASE_SUBMIT_LOG_DIR}" \
+    "${RUN_WORK_DIR}" \
+    "${MARKER_DIR}" \
+    "${LOCKDIR}"
 
 AUTO_LOG="${AUTO_LOG_DIR}/auto_AERA_NorESM_loop_$(date +%Y%m%d_%H%M%S).log"
+
+# Avoid creating accidental relative-path logs in the git-managed script directory.
+cd "${RUN_WORK_DIR}"
 
 # ============================================================
 # Helper functions
@@ -54,8 +76,9 @@ timestamp () {
     date "+%Y-%m-%d %H:%M:%S"
 }
 
+# Send runtime messages to stderr so command substitutions capture only returned values.
 log () {
-    echo "[$(timestamp)] $*" | tee -a "${AUTO_LOG}"
+    echo "[$(timestamp)] $*" | tee -a "${AUTO_LOG}" >&2
 }
 
 die () {
@@ -65,7 +88,7 @@ die () {
 
 run_cmd () {
     log "CMD: $*"
-    "$@" 2>&1 | tee -a "${AUTO_LOG}"
+    "$@" 2>&1 | tee -a "${AUTO_LOG}" >&2
 }
 
 job_state () {
@@ -86,12 +109,15 @@ wait_for_job_success () {
 
     log "Waiting for ${label} job ${jobid}"
 
-    while squeue -j "${jobid}" -h >/dev/null 2>&1; do
+    while true; do
         local qline
         qline="$(squeue -j "${jobid}" -h -o "%i %j %T %M %R" || true)"
-        if [[ -n "${qline}" ]]; then
-            log "Still running/queued: ${qline}"
+
+        if [[ -z "${qline}" ]]; then
+            break
         fi
+
+        log "Still running/queued: ${qline}"
         sleep "${POLL_JOB}"
     done
 
@@ -121,13 +147,42 @@ wait_for_job_success () {
     fi
 }
 
-extract_case_submit_jobid () {
+extract_case_submit_jobids () {
     local submit_log="$1"
 
-    # Try common Slurm/CIME output patterns.
-    grep -Eo 'Submitted batch job [0-9]+' "${submit_log}" \
-        | awk '{print $NF}' \
-        | tail -1
+    local run_id=""
+    local archive_id=""
+
+    # Preferred CIME summary lines.
+    run_id="$(
+        awk '/Submitted job case\.run with id/ {print $NF}' "${submit_log}" | tail -1
+    )"
+
+    archive_id="$(
+        awk '/Submitted job case\.st_archive with id/ {print $NF}' "${submit_log}" | tail -1
+    )"
+
+    # Fallback: parse section-wise generic lines.
+    if [[ -z "${run_id}" ]]; then
+        run_id="$(
+            awk '
+                /Submit job case\.run/ {section="run"; next}
+                /Submit job case\.st_archive/ {section="archive"; next}
+                section=="run" && /Submitted job id is/ {print $NF; exit}
+            ' "${submit_log}"
+        )"
+    fi
+
+    if [[ -z "${archive_id}" ]]; then
+        archive_id="$(
+            awk '
+                /Submit job case\.st_archive/ {section="archive"; next}
+                section=="archive" && /Submitted job id is/ {print $NF; exit}
+            ' "${submit_log}"
+        )"
+    fi
+
+    echo "${run_id} ${archive_id}"
 }
 
 submit_aera_job () {
@@ -135,14 +190,28 @@ submit_aera_job () {
 
     log "Submitting AERA prep job for YEAR_X=${year_x}"
 
+    local aera_out="${AERA_SLURM_LOG_DIR}/AERA_prep_YEARX${year_x}_%j.out"
+    local aera_err="${AERA_SLURM_LOG_DIR}/AERA_prep_YEARX${year_x}_%j.err"
+
     local jid
-    jid="$(sbatch --parsable "${AERA_JOB_SCRIPT}" --year-x "${year_x}")"
+    jid="$(
+        sbatch --parsable \
+            --chdir="${RUN_WORK_DIR}" \
+            --output="${aera_out}" \
+            --error="${aera_err}" \
+            "${AERA_JOB_SCRIPT}" \
+            --year-x "${year_x}" \
+            --log-root "${LOG_ROOT}"
+    )"
 
     if [[ -z "${jid}" ]]; then
         die "Failed to get AERA job id for YEAR_X=${year_x}"
     fi
 
     log "Submitted AERA prep job: ${jid}"
+    log "AERA stdout pattern: ${aera_out}"
+    log "AERA stderr pattern: ${aera_err}"
+
     echo "${jid}"
 }
 
@@ -153,13 +222,24 @@ submit_case_run () {
 
     log "Submitting NorESM case.run through case.submit for ${run_start}-${run_end}"
 
-    cd "${CASEROOT}"
-
     local submit_log
-    submit_log="${AUTO_LOG_DIR}/case_submit_YEARX${year_x}_$(date +%Y%m%d_%H%M%S).log"
+    submit_log="${CASE_SUBMIT_LOG_DIR}/case_submit_YEARX${year_x}_${run_start}-${run_end}_$(date +%Y%m%d_%H%M%S).log"
+
+    local model_out="${MODEL_SLURM_LOG_DIR}/case_run_and_archive_YEARX${year_x}_${run_start}-${run_end}.out"
+    local model_err="${MODEL_SLURM_LOG_DIR}/case_run_and_archive_YEARX${year_x}_${run_start}-${run_end}.err"
+
+    local batch_args
+    batch_args="${CASE_SUBMIT_BATCH_ARGS} --open-mode=append --output=${model_out} --error=${model_err}"
+
+    log "case.submit batch args: ${batch_args}"
+    log "case.submit log       : ${submit_log}"
 
     set +e
-    ./case.submit --batch-args "${CASE_SUBMIT_BATCH_ARGS}" 2>&1 | tee "${submit_log}" | tee -a "${AUTO_LOG}"
+    (
+        cd "${CASEROOT}"
+        ./case.submit --batch-args "${batch_args}"
+    ) 2>&1 | tee "${submit_log}" | tee -a "${AUTO_LOG}" >&2
+
     local rc=${PIPESTATUS[0]}
     set -e
 
@@ -167,17 +247,27 @@ submit_case_run () {
         die "case.submit failed for YEAR_X=${year_x}. See ${submit_log}"
     fi
 
-    local jid
-    jid="$(extract_case_submit_jobid "${submit_log}" || true)"
+    local run_id archive_id
+    read -r run_id archive_id < <(extract_case_submit_jobids "${submit_log}")
 
-    if [[ -z "${jid}" ]]; then
-        log "Could not parse job id from case.submit output."
+    if [[ -z "${run_id}" ]]; then
+        log "Could not parse case.run job id from case.submit output."
         log "case.submit log: ${submit_log}"
-        die "Failed to parse NorESM model job id."
+        die "Failed to parse NorESM case.run job id."
     fi
 
-    log "Submitted NorESM model job: ${jid}"
-    echo "${jid}"
+    if [[ -z "${archive_id}" ]]; then
+        log "Could not parse case.st_archive job id from case.submit output."
+        log "case.submit log: ${submit_log}"
+        die "Failed to parse NorESM case.st_archive job id."
+    fi
+
+    log "Submitted NorESM case.run job     : ${run_id}"
+    log "Submitted NorESM case.st_archive : ${archive_id}"
+    log "Model/archive stdout             : ${model_out}"
+    log "Model/archive stderr             : ${model_err}"
+
+    echo "${run_id} ${archive_id}"
 }
 
 wait_for_archive_files () {
@@ -224,7 +314,7 @@ wait_for_archive_files () {
             log "Archive files found for ${run_start}-${run_end}"
             ls -lh "${ARCHIVE_HIST_DIR}/${CASE}.cam.h0.${run_start}-01"* \
                    "${ARCHIVE_HIST_DIR}/${CASE}.cam.h0.${run_end}-12"* \
-                   2>/dev/null | tee -a "${AUTO_LOG}"
+                   2>/dev/null | tee -a "${AUTO_LOG}" >&2
             break
         fi
 
@@ -236,7 +326,6 @@ wait_for_archive_files () {
         waited=$((waited + POLL_ARCHIVE))
     done
 }
-
 
 wait_until_case_queue_quiet () {
     local grace_count=0
@@ -268,7 +357,7 @@ wait_until_case_queue_quiet () {
         else
             grace_count=0
             log "Case-related jobs still in queue:"
-            echo "${qlines}" | tee -a "${AUTO_LOG}"
+            echo "${qlines}" | tee -a "${AUTO_LOG}" >&2
         fi
 
         sleep "${POLL_JOB}"
@@ -280,14 +369,14 @@ check_aera_ready_marker () {
     local run_start="$2"
     local run_end="$3"
 
-    local marker="${CASEROOT}/AERA_wrapper_work/markers/AERA_YEARX${year_x}_READY_FOR_CASE_SUBMIT_${run_start}-${run_end}.marker"
+    local marker="${MARKER_DIR}/AERA_YEARX${year_x}_READY_FOR_CASE_SUBMIT_${run_start}-${run_end}.marker"
 
     if [[ ! -s "${marker}" ]]; then
         die "AERA ready marker not found: ${marker}"
     fi
 
     log "AERA ready marker found: ${marker}"
-    cat "${marker}" | tee -a "${AUTO_LOG}"
+    cat "${marker}" | tee -a "${AUTO_LOG}" >&2
 }
 
 # ============================================================
@@ -303,7 +392,9 @@ log "AERA_JOB_SCRIPT=${AERA_JOB_SCRIPT}"
 log "FIRST_STOCKTAKE_YEAR=${FIRST_STOCKTAKE_YEAR}"
 log "FINAL_MODEL_YEAR=${FINAL_MODEL_YEAR}"
 log "CASE_SUBMIT_BATCH_ARGS=${CASE_SUBMIT_BATCH_ARGS}"
+log "LOG_ROOT=${LOG_ROOT}"
 log "AUTO_LOG=${AUTO_LOG}"
+log "RUN_WORK_DIR=${RUN_WORK_DIR}"
 log "============================================================"
 
 test -d "${CASEROOT}" || die "CASEROOT does not exist: ${CASEROOT}"
@@ -333,8 +424,12 @@ while [[ "${YEAR_X}" -le "${LAST_STOCKTAKE_YEAR}" ]]; do
     # ------------------------------------------------------------
     # 2. Submit NorESM model run through CIME case.submit
     # ------------------------------------------------------------
-    MODEL_JOBID="$(submit_case_run "${YEAR_X}" "${RUN_START}" "${RUN_END}")"
-    wait_for_job_success "${MODEL_JOBID}" "NorESM model"
+    read -r MODEL_JOBID ARCHIVE_JOBID < <(submit_case_run "${YEAR_X}" "${RUN_START}" "${RUN_END}")
+
+    # This waits for the last job id reported by case.submit. Depending on CIME
+    # behavior, this may be the model job or the final dependency job.
+    wait_for_job_success "${MODEL_JOBID}" "NorESM model/final dependency"
+    wait_for_job_success "${ARCHIVE_JOBID}" "NorESM archive"
 
     # ------------------------------------------------------------
     # 3. Wait for CIME short-term archive job to finish
@@ -354,3 +449,4 @@ log "============================================================"
 log "All requested AERA-NorESM cycles completed successfully."
 log "Final model year reached: ${FINAL_MODEL_YEAR}"
 log "============================================================"
+
