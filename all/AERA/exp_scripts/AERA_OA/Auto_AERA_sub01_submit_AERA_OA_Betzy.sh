@@ -44,7 +44,13 @@ Optional:
   --emission-template-nc FILE
   --log-root DIR
   --omegaa-target-abs VALUE
-  --current-metric-csv FILE
+  --ocn-hist-dir DIR
+  --ocn-stream STREAM
+  --omegaa-direct-var NAME
+  --omegaa-numerator-var NAME
+  --omegaa-denominator-var NAME
+  --area-var NAME
+  --current-metric-csv FILE   # optional override; normally not used
   --metric-column NAME
   --hist-metric-column NAME
   --skip-namelist-update
@@ -65,6 +71,13 @@ AERAID="AERA_OmegaA_Betzy"
 
 ARCHIVE_ROOT="/cluster/work/users/yongyub/archive"
 CAM_HIST_DIR=""
+OCN_HIST_DIR=""
+OCN_STREAM="hbgcm"
+OMEGAA_DIRECT_VAR="omegaalvl"
+OMEGAA_NUMERATOR_VAR="co3os"
+OMEGAA_DENOMINATOR_VAR="co3satos"
+AREA_VAR="parea"
+AREA_GRID_FILE="/cluster/shared/noresm/inputdata/ocn/blom/grid/grid_tnx1v4_20170622.nc"
 
 AERA_SCRIPT="${HOME}/Dropbox/source/python/all/AERA/exp_scripts/AERA_OA/run_AERA_OA_stocktake_Betzy.py"
 
@@ -110,6 +123,34 @@ while [[ $# -gt 0 ]]; do
             ;;
         --cam-hist-dir)
             CAM_HIST_DIR="$2"
+            shift 2
+            ;;
+        --ocn-hist-dir)
+            OCN_HIST_DIR="$2"
+            shift 2
+            ;;
+        --ocn-stream)
+            OCN_STREAM="$2"
+            shift 2
+            ;;
+        --omegaa-direct-var)
+            OMEGAA_DIRECT_VAR="$2"
+            shift 2
+            ;;
+        --omegaa-numerator-var)
+            OMEGAA_NUMERATOR_VAR="$2"
+            shift 2
+            ;;
+        --omegaa-denominator-var)
+            OMEGAA_DENOMINATOR_VAR="$2"
+            shift 2
+            ;;
+        --area-var)
+            AREA_VAR="$2"
+            shift 2
+            ;;
+        --area-grid-file)
+            AREA_GRID_FILE="$2"
             shift 2
             ;;
         --archive-root)
@@ -184,6 +225,10 @@ if [[ -z "${CAM_HIST_DIR}" ]]; then
     CAM_HIST_DIR="${ARCHIVE_ROOT}/${CASE}/atm/hist"
 fi
 
+if [[ -z "${OCN_HIST_DIR}" ]]; then
+    OCN_HIST_DIR="${ARCHIVE_ROOT}/${CASE}/ocn/hist"
+fi
+
 LOGDIR="${LOG_ROOT}/aera_internal"
 MARKER_DIR="${LOG_ROOT}/markers"
 LOCKDIR="${LOG_ROOT}/locks"
@@ -206,17 +251,8 @@ SEG_START=$((YEAR_X - 4))
 SEG_END="${YEAR_X}"
 TAG="${RUN_START}-${RUN_END}"
 
-# Resolve current-segment OmegaA CSV using the unified v6 convention.
-# YEAR_X=2019 reads the just-finished 2015-2019 metric from AERA_hist.
-# Later stocktakes read the just-finished segment metric from AERA_future.
-if [[ -z "${CURRENT_METRIC_CSV}" ]]; then
-    if [[ "${YEAR_X}" -eq 2019 ]]; then
-        CURRENT_METRIC_CSV="${AERA_HIST_DIR}/${AERAID}_model_OmegaA_${SEG_START}-${SEG_END}.csv"
-    else
-        CURRENT_METRIC_CSV="${AERA_FUTURE_DIR}/${AERAID}_model_OmegaA_${SEG_START}-${SEG_END}.csv"
-    fi
-fi
-
+# Current-segment OmegaA is computed directly from OCN_HIST_DIR by default.
+# CURRENT_METRIC_CSV is only an optional override.
 # Avoid creating accidental relative-path logs in the git-managed script directory.
 cd "${JOB_WORK_DIR}"
 
@@ -246,6 +282,13 @@ echo "[$(timestamp)] CASEROOT              = ${CASEROOT}"
 echo "[$(timestamp)] RUNDIR                = ${RUNDIR}"
 echo "[$(timestamp)] ARCHIVE_ROOT          = ${ARCHIVE_ROOT}"
 echo "[$(timestamp)] CAM_HIST_DIR          = ${CAM_HIST_DIR}"
+echo "[$(timestamp)] OCN_HIST_DIR          = ${OCN_HIST_DIR}"
+echo "[$(timestamp)] OCN_STREAM            = ${OCN_STREAM}"
+echo "[$(timestamp)] OMEGAA_DIRECT_VAR    = ${OMEGAA_DIRECT_VAR}"
+echo "[$(timestamp)] OMEGAA_NUMERATOR_VAR  = ${OMEGAA_NUMERATOR_VAR}"
+echo "[$(timestamp)] OMEGAA_DENOMINATOR_VAR= ${OMEGAA_DENOMINATOR_VAR}"
+echo "[$(timestamp)] AREA_VAR              = ${AREA_VAR}"
+echo "[$(timestamp)] AREA_GRID_FILE        = ${AREA_GRID_FILE}"
 echo "[$(timestamp)] AERA_SCRIPT           = ${AERA_SCRIPT}"
 echo "[$(timestamp)] AERAID                = ${AERAID}"
 echo "[$(timestamp)] INITIAL_STATE_DAT     = ${INITIAL_STATE_DAT}"
@@ -269,6 +312,7 @@ echo "[$(timestamp)] SKIP_PREVIEW          = ${SKIP_PREVIEW}"
 # ============================================================
 test -d "${CASEROOT}" || die "CASEROOT does not exist: ${CASEROOT}"
 test -d "${RUNDIR}" || die "RUNDIR does not exist: ${RUNDIR}"
+test -d "${OCN_HIST_DIR}" || die "OCN_HIST_DIR does not exist: ${OCN_HIST_DIR}"
 test -f "${AERA_SCRIPT}" || die "AERA script does not exist: ${AERA_SCRIPT}"
 test -f "${INITIAL_STATE_DAT}" || die "Initial state dat does not exist: ${INITIAL_STATE_DAT}"
 if [[ -n "${HIST_INPUT_CSV}" ]]; then
@@ -280,10 +324,20 @@ test -f "${EMISSION_TEMPLATE_NC}" || die "Emission template netCDF does not exis
 if [[ -z "${OMEGAA_TARGET_ABS}" ]]; then
     die "OMEGAA_TARGET_ABS is not set. Pass --omegaa-target-abs or export OMEGAA_TARGET_ABS."
 fi
-test -f "${CURRENT_METRIC_CSV}" || die "Current OmegaA metric CSV does not exist: ${CURRENT_METRIC_CSV}
-Expected v6 convention:
-  YEAR_X=2019: ${AERA_HIST_DIR}/${AERAID}_model_OmegaA_${SEG_START}-${SEG_END}.csv
-  YEAR_X>2019: ${AERA_FUTURE_DIR}/${AERAID}_model_OmegaA_${SEG_START}-${SEG_END}.csv"
+if [[ -n "${CURRENT_METRIC_CSV}" ]]; then
+    test -f "${CURRENT_METRIC_CSV}" || die "Current OmegaA metric CSV override does not exist: ${CURRENT_METRIC_CSV}"
+else
+    echo "[$(timestamp)] CURRENT_METRIC_CSV is not set. OmegaA will be computed from ${OCN_HIST_DIR}/${CASE}.blom.${OCN_STREAM}.YYYY-MM.nc using direct variable ${OMEGAA_DIRECT_VAR} (surface level)."
+
+    # Do not require exact ${SEG_START}-01 or ${SEG_END}-12 files here.
+    # Native NorESM monthly files can be timestamped at the end of the averaging
+    # interval, so the first useful file may be ${SEG_START}-02. The Python
+    # script assigns samples to years using the time coordinate.
+    test -f "${AREA_GRID_FILE}" || die "AREA_GRID_FILE does not exist: ${AREA_GRID_FILE}"
+    if ! compgen -G "${OCN_HIST_DIR}/${CASE}.blom.${OCN_STREAM}.*.nc" >/dev/null; then
+        die "No OCN files found: ${OCN_HIST_DIR}/${CASE}.blom.${OCN_STREAM}.*.nc"
+    fi
+fi
 
 
 if [[ "${YEAR_X}" -gt 2019 ]]; then
@@ -323,6 +377,13 @@ python -u "${AERA_SCRIPT}" \
     --rundir "${RUNDIR}" \
     --archive-root "${ARCHIVE_ROOT}" \
     --cam-hist-dir "${CAM_HIST_DIR}" \
+    --ocn-hist-dir "${OCN_HIST_DIR}" \
+    --ocn-stream "${OCN_STREAM}" \
+    --omegaa-direct-var "${OMEGAA_DIRECT_VAR}" \
+    --omegaa-numerator-var "${OMEGAA_NUMERATOR_VAR}" \
+    --omegaa-denominator-var "${OMEGAA_DENOMINATOR_VAR}" \
+    --area-var "${AREA_VAR}" \
+    --area-grid-file "${AREA_GRID_FILE}" \
     --aera-id "${AERAID}" \
     --initial-state-dat "${INITIAL_STATE_DAT}" \
     --future-output-dir "${AERA_FUTURE_DIR}" \

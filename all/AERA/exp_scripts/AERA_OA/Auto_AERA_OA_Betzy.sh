@@ -33,6 +33,14 @@ OMEGAA_TARGET_ABS="${OMEGAA_TARGET_ABS:-2.75}"
 METRIC_COLUMN="${METRIC_COLUMN:-OmegaA}"
 HIST_METRIC_COLUMN="${HIST_METRIC_COLUMN:-}"
 
+# OmegaA is computed from NorESM ocean history files unless CURRENT_METRIC_CSV is explicitly supplied.
+OCN_STREAM="${OCN_STREAM:-hbgcm}"
+OMEGAA_DIRECT_VAR="${OMEGAA_DIRECT_VAR:-omegaalvl}"
+OMEGAA_NUMERATOR_VAR="${OMEGAA_NUMERATOR_VAR:-co3os}"
+OMEGAA_DENOMINATOR_VAR="${OMEGAA_DENOMINATOR_VAR:-co3satos}"
+AREA_VAR="${AREA_VAR:-parea}"
+AREA_GRID_FILE="${AREA_GRID_FILE:-/cluster/shared/noresm/inputdata/ocn/blom/grid/grid_tnx1v4_20170622.nc}"
+
 # Extra arguments passed to case.submit.
 # Output/error paths are added automatically by submit_case_run().
 CASE_SUBMIT_BATCH_ARGS="-A nn2980k "
@@ -214,6 +222,12 @@ submit_aera_job () {
             --log-root "${LOG_ROOT}" \
             --omegaa-target-abs "${OMEGAA_TARGET_ABS}" \
             --metric-column "${METRIC_COLUMN}" \
+            --ocn-stream "${OCN_STREAM}" \
+            --omegaa-direct-var "${OMEGAA_DIRECT_VAR}" \
+            --omegaa-numerator-var "${OMEGAA_NUMERATOR_VAR}" \
+            --omegaa-denominator-var "${OMEGAA_DENOMINATOR_VAR}" \
+            --area-var "${AREA_VAR}" \
+            --area-grid-file "${AREA_GRID_FILE}" \
             "${extra_aera_args[@]}"
     )"
 
@@ -406,6 +420,12 @@ log "FIRST_STOCKTAKE_YEAR=${FIRST_STOCKTAKE_YEAR}"
 log "FINAL_MODEL_YEAR=${FINAL_MODEL_YEAR}"
 log "CASE_SUBMIT_BATCH_ARGS=${CASE_SUBMIT_BATCH_ARGS}"
 log "OMEGAA_TARGET_ABS=${OMEGAA_TARGET_ABS}"
+log "OCN_STREAM=${OCN_STREAM}"
+log "OMEGAA_DIRECT_VAR=${OMEGAA_DIRECT_VAR}"
+log "OMEGAA_NUMERATOR_VAR=${OMEGAA_NUMERATOR_VAR}"
+log "OMEGAA_DENOMINATOR_VAR=${OMEGAA_DENOMINATOR_VAR}"
+log "AREA_VAR=${AREA_VAR}"
+log "AREA_GRID_FILE=${AREA_GRID_FILE}"
 log "METRIC_COLUMN=${METRIC_COLUMN}"
 log "HIST_METRIC_COLUMN=${HIST_METRIC_COLUMN}"
 log "LOG_ROOT=${LOG_ROOT}"

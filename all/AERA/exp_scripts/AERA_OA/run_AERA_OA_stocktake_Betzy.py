@@ -3,10 +3,13 @@
 Run one AERA-OA stocktake for NorESM2-AERA on Betzy and create scaled
 NorESM CO2 emission netCDF.
 
-This OA version assumes that the annual OmegaA metric for the just-finished
-5-year segment has already been postprocessed into a CSV file with at least:
-    year,<metric-column>
-where <metric-column> defaults to OmegaA.
+This OA version computes the annual OmegaA metric for the just-finished
+5-year model segment directly from archived NorESM BGC files by default,
+using the native OmegaA variable omegaalvl at the surface level and parea
+for area-weighted global means.
+
+An optional precomputed CSV can still be supplied with --current-metric-csv,
+but the normal Betzy workflow reads ocn/hist/*.blom.hbgcm.YYYY-MM.nc.
 
 The aera_oa package expects df["OmegaA"] and ff_emission through YEAR_X.
 """
@@ -19,11 +22,14 @@ import pickle
 import shutil
 from pathlib import Path
 from typing import Optional
+import re
+from collections import defaultdict
+import itertools
 
 import numpy as np
 import pandas as pd
 import xarray as xr
-from netCDF4 import Dataset
+from netCDF4 import Dataset, num2date
 
 import aera_oa
 
@@ -56,6 +62,56 @@ def parse_args() -> argparse.Namespace:
         default=None,
         type=Path,
         help="Archived CAM h0 monthly directory; kept for workflow consistency.",
+    )
+    p.add_argument(
+        "--ocn-hist-dir",
+        default=None,
+        type=Path,
+        help="Archived NorESM ocean/BGC history directory. Default: archive-root/archive-case/ocn/hist.",
+    )
+    p.add_argument(
+        "--ocn-stream",
+        default="hbgcm",
+        help="NorESM ocean/BGC monthly stream used for OmegaA calculation. Default: hbgcm.",
+    )
+    p.add_argument(
+        "--omegaa-direct-var",
+        default="omegaalvl",
+        help=(
+            "Native OmegaA variable to use directly. Default: omegaalvl. "
+            "If unavailable, the script falls back to numerator/denominator variables."
+        ),
+    )
+    p.add_argument(
+        "--omegaa-depth-index",
+        default=0,
+        type=int,
+        help="Vertical index to use when --omegaa-direct-var has a depth/level dimension. Default: 0.",
+    )
+    p.add_argument(
+        "--omegaa-numerator-var",
+        default="co3os",
+        help="Fallback numerator variable for OmegaA if direct variable is unavailable. Default: co3os.",
+    )
+    p.add_argument(
+        "--omegaa-denominator-var",
+        default="co3satos",
+        help="Denominator variable for OmegaA. Default: co3satos.",
+    )
+    p.add_argument(
+        "--area-var",
+        default="parea",
+        help="Grid-cell area variable for area-weighted mean. Default: parea.",
+    )
+    p.add_argument(
+        "--area-grid-file",
+        default="/cluster/shared/noresm/inputdata/ocn/blom/grid/grid_tnx1v4_20170622.nc",
+        type=Path,
+        help=(
+            "Optional NorESM/BLOM grid file containing the area variable. "
+            "Used when parea is not stored in the monthly history file. "
+            "Default: /cluster/shared/noresm/inputdata/ocn/blom/grid/grid_tnx1v4_20170622.nc"
+        ),
     )
 
     p.add_argument(
@@ -90,8 +146,8 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help=(
             "Optional CSV containing annual OmegaA for the just-finished segment. "
-            "Required columns: year and metric column. If omitted, the script relies on "
-            "values already available from the previous pickle and/or --hist-input-csv."
+            "Required columns: year and metric column. If omitted, the script computes "
+            "OmegaA directly from NorESM ocean/BGC history files."
         ),
     )
     p.add_argument(
@@ -154,6 +210,9 @@ def parse_args() -> argparse.Namespace:
 
     if args.archive_case is None:
         args.archive_case = args.case
+
+    if args.ocn_hist_dir is None:
+        args.ocn_hist_dir = args.archive_root / args.archive_case / "ocn" / "hist"
 
     return args
 
@@ -349,6 +408,484 @@ def read_current_metric_csv(
         print(f"Annual OmegaA {yy}: {val:.8f}")
 
     return out
+
+
+def find_ocn_segment_files(
+    ocn_hist_dir: Path,
+    case: str,
+    stream: str,
+    ystart: int,
+    yend: int,
+) -> list[Path]:
+    """
+    Find NorESM ocean/BGC monthly files for the stocktake segment.
+
+    Native NorESM monthly files can be timestamped by the end of the
+    averaging interval, so the first useful file may be YYYY-02 rather than
+    YYYY-01. Therefore we collect a slightly wider filename window and later
+    assign each time sample to the correct year using the file time coordinate.
+    """
+
+    patterns = [
+        f"{case}.blom.{stream}.*.nc",
+        f"*.blom.{stream}.*.nc",
+    ]
+
+    files: list[Path] = []
+    for pat in patterns:
+        files = sorted(ocn_hist_dir.glob(pat))
+        if files:
+            break
+
+    if not files:
+        raise FileNotFoundError(
+            f"Cannot find NorESM ocean/BGC files in {ocn_hist_dir}. "
+            f"Tried patterns: {patterns}"
+        )
+
+    # Keep a one-year buffer because monthly files can be timestamped at the
+    # next month/year relative to the actual averaged data.
+    selected: list[Path] = []
+    date_re = re.compile(r"\.blom\." + re.escape(stream) + r"\.(\d{4})-(\d{2})\.nc$")
+
+    for f in files:
+        m = date_re.search(f.name)
+        if m is None:
+            # Keep unmatched files; the time coordinate will decide later.
+            selected.append(f)
+            continue
+        yy = int(m.group(1))
+        if (ystart - 1) <= yy <= (yend + 1):
+            selected.append(f)
+
+    if not selected:
+        raise FileNotFoundError(
+            f"Found {len(files)} files for stream {stream}, but none fall near "
+            f"segment {ystart}-{yend}. First few files: {[x.name for x in files[:8]]}"
+        )
+
+    print(f"Found {len(selected)} candidate OCN files for {ystart}-{yend}.")
+    print("First candidate files:")
+    for f in selected[:8]:
+        print(f"  {f}")
+    if len(selected) > 8:
+        print(f"  ... ({len(selected)-8} more)")
+
+    return selected
+
+
+def _candidate_area_names(ds: xr.Dataset, data_var: str, requested_area_var: str) -> list[str]:
+    """Build a priority-ordered list of possible area-variable names."""
+
+    names: list[str] = []
+
+    if requested_area_var is not None and str(requested_area_var).strip() != "":
+        names.append(str(requested_area_var).strip())
+
+    if data_var in ds.variables:
+        # Try CF-style cell_measures, e.g. "area: parea".
+        cell_measures = ds[data_var].attrs.get("cell_measures", "")
+        if "area:" in cell_measures:
+            area_name = cell_measures.split("area:", 1)[1].strip().split()[0]
+            if area_name not in names:
+                names.append(area_name)
+
+    for name in ["parea", "tarea", "area", "areacello", "cell_area"]:
+        if name not in names:
+            names.append(name)
+
+    return names
+
+
+def _align_area_to_field(
+    area: xr.DataArray,
+    field: xr.DataArray,
+    area_source: str,
+) -> xr.DataArray:
+    """Align a 2-D grid-cell area field to the horizontal dimensions of field."""
+
+    area = area.squeeze(drop=True)
+
+    # Best case: dimension names already match the field.
+    if set(area.dims).issubset(set(field.dims)):
+        ok = True
+        for d in area.dims:
+            if area.sizes[d] != field.sizes[d]:
+                ok = False
+                break
+        if ok:
+            ordered_dims = [d for d in field.dims if d in area.dims]
+            return area.transpose(*ordered_dims)
+
+    # If the grid file uses different dimension names, match by shape to
+    # dimensions in the target field.  This is intentionally shape-based so
+    # that grid files with (nj, ni) can be used for fields with (y, x).
+    field_dims = [d for d in field.dims if d != "time"]
+    area_shape = tuple(area.shape)
+
+    for dims in itertools.permutations(field_dims, area.ndim):
+        if tuple(field.sizes[d] for d in dims) == area_shape:
+            coords = {d: field[d] for d in dims if d in field.coords}
+            aligned = xr.DataArray(
+                np.asarray(area.values),
+                dims=dims,
+                coords=coords,
+                name=area.name,
+                attrs=area.attrs,
+            )
+            print(
+                f"  Align area from {area_source}: original dims={area.dims}, "
+                f"using field dims={dims}"
+            )
+            return aligned
+
+    raise ValueError(
+        f"Could not align area field from {area_source} to OmegaA field. "
+        f"area dims={area.dims}, area shape={area.shape}, "
+        f"field dims={field.dims}, field shape={field.shape}"
+    )
+
+
+def load_area_for_field(
+    ds: xr.Dataset,
+    field: xr.DataArray,
+    data_var: str,
+    requested_area_var: str,
+    area_grid_file: Optional[Path] = None,
+) -> tuple[xr.DataArray, str]:
+    """Load grid-cell area from the monthly file or from an external grid file."""
+
+    candidate_names = _candidate_area_names(ds, data_var, requested_area_var)
+
+    # First try the monthly history file itself.
+    for name in candidate_names:
+        if name in ds.variables:
+            area = ds[name].astype("float64")
+            area = _align_area_to_field(area, field, f"monthly file variable {name}")
+            return area, name
+
+    # Then try the external BLOM grid file.  This is the expected path for
+    # raw NorESM output where parea is not saved in each monthly file.
+    if area_grid_file is not None and str(area_grid_file).strip() != "":
+        area_grid_file = Path(area_grid_file)
+        if area_grid_file.exists():
+            with xr.open_dataset(area_grid_file, decode_times=False, mask_and_scale=True) as ds_area:
+                for name in candidate_names:
+                    if name in ds_area.variables:
+                        area = ds_area[name].astype("float64").load()
+                        area = _align_area_to_field(area, field, f"grid file {area_grid_file} variable {name}")
+                        return area, f"{name} ({area_grid_file})"
+                raise KeyError(
+                    f"Area grid file exists but none of the candidate area variables were found. "
+                    f"area_grid_file={area_grid_file}, candidates={candidate_names}, "
+                    f"available={list(ds_area.variables)[:80]}"
+                )
+        else:
+            print(f"WARNING: area grid file does not exist: {area_grid_file}")
+
+    raise KeyError(
+        f"Cannot find area variable for {data_var}. requested={requested_area_var}, "
+        f"candidates={candidate_names}, available monthly variables include: {list(ds.variables)[:80]}, "
+        f"area_grid_file={area_grid_file}"
+    )
+
+def find_nc_variable(
+    ds: xr.Dataset,
+    requested: str | None,
+    aliases: list[str],
+) -> Optional[str]:
+    """Return requested variable or alias if present, otherwise None."""
+
+    names: list[str] = []
+    if requested is not None and str(requested).strip() != "":
+        names.append(str(requested).strip())
+    names.extend([x for x in aliases if x not in names])
+
+    for name in names:
+        if name in ds.variables:
+            return name
+
+    return None
+
+
+def choose_nc_variable(
+    ds: xr.Dataset,
+    requested: str,
+    aliases: list[str],
+    label: str,
+    path: Path,
+) -> str:
+    """Choose requested variable if present, otherwise try aliases."""
+
+    name = find_nc_variable(ds, requested, aliases)
+    if name is not None:
+        if name != requested:
+            print(f"  Use {label} variable alias: requested={requested}, using={name}")
+        return name
+
+    available = [
+        v for v in ds.data_vars
+        if ("co3" in v.lower() or "sat" in v.lower() or
+            "omega" in v.lower() or "arag" in v.lower())
+    ]
+    raise KeyError(
+        f"Cannot find {label} variable. requested={requested}, aliases={aliases}, "
+        f"file={path}, available BGC-like vars={available}"
+    )
+
+
+def decode_time_years(ds: xr.Dataset, n_time: int) -> np.ndarray:
+    """Return integer years for each time sample."""
+
+    if "time" not in ds.variables:
+        return np.array([np.nan] * n_time)
+
+    time = ds["time"]
+    vals = np.asarray(time.values).reshape(-1)
+    if vals.size != n_time:
+        vals = vals[:n_time]
+
+    units = time.attrs.get("units", None)
+    calendar = time.attrs.get("calendar", "standard")
+
+    if units is not None:
+        try:
+            dates = num2date(vals, units=units, calendar=calendar, only_use_cftime_datetimes=False)
+            return np.asarray([int(d.year) for d in dates], dtype=int)
+        except Exception as exc:
+            print(f"WARNING: failed to decode time with num2date: {exc}")
+
+    # Fallback for native NorESM files that sometimes include integer date.
+    for name in ["date", "datesec"]:
+        if name in ds.variables:
+            raw = np.asarray(ds[name].values).reshape(-1)
+            if raw.size >= n_time:
+                return (raw[:n_time].astype(int) // 10000).astype(int)
+
+    raise ValueError(
+        "Could not decode time years from dataset. "
+        "Need a valid time units/calendar or date variable."
+    )
+
+
+def _select_surface_level_if_needed(
+    da: xr.DataArray,
+    area: xr.DataArray,
+    depth_index: int,
+) -> xr.DataArray:
+    """Select one vertical level if da has a non-time, non-area dimension."""
+
+    area_dims = set(area.dims)
+    vertical_dims = [d for d in da.dims if d != "time" and d not in area_dims]
+
+    if len(vertical_dims) == 0:
+        return da
+
+    if len(vertical_dims) > 1:
+        raise ValueError(
+            f"OmegaA variable has more than one non-spatial dimension after excluding "
+            f"time and area dims: {vertical_dims}. dims={da.dims}, area_dims={area.dims}"
+        )
+
+    zdim = vertical_dims[0]
+    if depth_index < 0 or depth_index >= da.sizes[zdim]:
+        raise IndexError(
+            f"Requested omegaa depth index {depth_index} is outside dimension {zdim} "
+            f"with size {da.sizes[zdim]}"
+        )
+
+    coord_msg = ""
+    if zdim in da.coords:
+        try:
+            coord_val = float(da[zdim].isel({zdim: depth_index}).values)
+            coord_msg = f" ({zdim}={coord_val:g})"
+        except Exception:
+            coord_msg = ""
+
+    print(f"  Select surface/level for OmegaA: {zdim}[{depth_index}]{coord_msg}")
+    return da.isel({zdim: depth_index})
+
+
+def global_mean_omegaa_from_file(
+    path: Path,
+    direct_var: str = "omegaalvl",
+    depth_index: int = 0,
+    numerator_var: str = "co3os",
+    denominator_var: str = "co3satos",
+    area_var: str = "parea",
+    area_grid_file: Optional[Path] = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Compute time-resolved global area-weighted OmegaA from one NorESM file.
+
+    Default behavior uses native OmegaA variable omegaalvl and selects the
+    first vertical level if a depth dimension is present. If the direct OmegaA
+    variable is not found, the function falls back to OmegaA = numerator / denominator.
+    The returned arrays are (years, global_mean_values), one entry per time sample.
+    """
+
+    print(f"Read OCN file: {path}")
+
+    with xr.open_dataset(path, decode_times=False, mask_and_scale=True) as ds:
+        direct_name = find_nc_variable(
+            ds,
+            direct_var,
+            aliases=["omegaalvl", "OmegaA", "omegaa", "omega_arag", "omegaarag", "omega_arag_lvl"],
+        )
+
+        if direct_name is not None:
+            omega = ds[direct_name].astype("float64")
+            area, avar = load_area_for_field(
+                ds=ds,
+                field=omega,
+                data_var=direct_name,
+                requested_area_var=area_var,
+                area_grid_file=area_grid_file,
+            )
+            omega = _select_surface_level_if_needed(omega, area, depth_index)
+            source_msg = direct_name
+        else:
+            print(
+                f"  Direct OmegaA variable {direct_var!r} not found; "
+                "falling back to numerator/denominator calculation."
+            )
+            num_name = choose_nc_variable(
+                ds,
+                numerator_var,
+                aliases=["co3os", "co3", "CO3", "co3_os", "co3lvl"],
+                label="OmegaA numerator",
+                path=path,
+            )
+            den_name = choose_nc_variable(
+                ds,
+                denominator_var,
+                aliases=["co3satos", "co3sataragos", "co3satarag", "co3sat_arag", "CO3SATOS"],
+                label="OmegaA denominator",
+                path=path,
+            )
+            num = ds[num_name].astype("float64")
+            den = ds[den_name].astype("float64")
+            area, avar = load_area_for_field(
+                ds=ds,
+                field=num,
+                data_var=num_name,
+                requested_area_var=area_var,
+                area_grid_file=area_grid_file,
+            )
+            num = _select_surface_level_if_needed(num, area, depth_index)
+            den = _select_surface_level_if_needed(den, area, depth_index)
+            omega = xr.where(den != 0, num / den, np.nan)
+            source_msg = f"{num_name}/{den_name}"
+
+        if "time" not in omega.dims:
+            omega = omega.expand_dims(time=[0])
+
+        omega = omega.where(np.isfinite(omega))
+
+        spatial_dims = [d for d in omega.dims if d != "time"]
+        if not spatial_dims:
+            vals = np.asarray(omega.values, dtype=float).reshape(-1)
+        else:
+            # Broadcast area over time if needed. xarray aligns by named dimensions.
+            valid_area = area.where(np.isfinite(omega))
+            weighted_sum = (omega * valid_area).sum(dim=spatial_dims, skipna=True)
+            weight_sum = valid_area.sum(dim=spatial_dims, skipna=True)
+            gm = weighted_sum / weight_sum
+            vals = np.asarray(gm.values, dtype=float).reshape(-1)
+
+        years = decode_time_years(ds, vals.size)
+        finite = np.isfinite(vals)
+        vals = vals[finite]
+        years = years[finite]
+
+        if vals.size == 0:
+            raise ValueError(f"No finite OmegaA global-mean values computed from {path}")
+
+        print(
+            f"  OmegaA source={source_msg}, area={avar}, "
+            f"n={vals.size}, years={sorted(set(years.tolist()))}, mean={np.nanmean(vals):.8f}"
+        )
+
+        return years, vals
+
+def compute_annual_omegaa_from_ocn_history(
+    ocn_hist_dir: Path,
+    case: str,
+    stream: str,
+    ystart: int,
+    yend: int,
+    direct_var: str = "omegaalvl",
+    depth_index: int = 0,
+    numerator_var: str = "co3os",
+    denominator_var: str = "co3satos",
+    area_var: str = "parea",
+    area_grid_file: Optional[Path] = None,
+) -> dict[int, float]:
+    """Compute annual global mean OmegaA for each year from NorESM ocean history files."""
+
+    if not ocn_hist_dir.exists():
+        raise FileNotFoundError(f"OCN_HIST_DIR does not exist: {ocn_hist_dir}")
+
+    print("Compute annual OmegaA directly from NorESM ocean/BGC output")
+    print(f"OCN hist dir     : {ocn_hist_dir}")
+    print(f"Stream           : {stream}")
+    print(f"OmegaA direct var: {direct_var}")
+    print(f"OmegaA depth idx : {depth_index}")
+    print(f"Fallback formula : {numerator_var} / {denominator_var}")
+    print(f"Area variable    : {area_var}")
+    print(f"Area grid file   : {area_grid_file}")
+    print(f"Years            : {ystart}-{yend}")
+
+    files = find_ocn_segment_files(
+        ocn_hist_dir=ocn_hist_dir,
+        case=case,
+        stream=stream,
+        ystart=ystart,
+        yend=yend,
+    )
+
+    grouped: dict[int, list[np.ndarray]] = defaultdict(list)
+
+    for f in files:
+        years, vals = global_mean_omegaa_from_file(
+            path=f,
+            direct_var=direct_var,
+            depth_index=depth_index,
+            numerator_var=numerator_var,
+            denominator_var=denominator_var,
+            area_var=area_var,
+            area_grid_file=area_grid_file,
+        )
+        for yy in range(ystart, yend + 1):
+            these = vals[years == yy]
+            if these.size:
+                grouped[yy].append(these)
+
+    out: dict[int, float] = {}
+    missing: list[int] = []
+
+    for yy in range(ystart, yend + 1):
+        if yy not in grouped or len(grouped[yy]) == 0:
+            missing.append(yy)
+            continue
+
+        all_vals = np.concatenate(grouped[yy])
+        annual_mean = float(np.nanmean(all_vals))
+        if not np.isfinite(annual_mean):
+            missing.append(yy)
+            continue
+
+        out[yy] = annual_mean
+        print(f"Annual OmegaA {yy}: {annual_mean:.8f}  (n_time={all_vals.size})")
+
+    if missing:
+        raise ValueError(
+            f"Could not compute annual OmegaA for years {missing}. "
+            "Check OCN stream, file timestamps, variable names, and archive completeness."
+        )
+
+    return out
+
 
 # ============================================================
 # Emission netCDF writer
@@ -728,6 +1265,14 @@ def main() -> None:
     print(f"RUNDIR              : {args.rundir}")
     print(f"ARCHIVE_ROOT        : {args.archive_root}")
     print(f"ARCHIVE_CASE        : {args.archive_case}")
+    print(f"OCN hist dir        : {args.ocn_hist_dir}")
+    print(f"OCN stream          : {args.ocn_stream}")
+    print(f"OmegaA direct var   : {args.omegaa_direct_var}")
+    print(f"OmegaA depth index  : {args.omegaa_depth_index}")
+    print(f"OmegaA numerator    : {args.omegaa_numerator_var}")
+    print(f"OmegaA denominator  : {args.omegaa_denominator_var}")
+    print(f"Area variable       : {args.area_var}")
+    print(f"Area grid file      : {args.area_grid_file}")
     print(f"YEAR_X              : {y2}")
     print(f"Current segment     : {y1}-{y2}")
     print(f"OmegaA target abs   : {args.omegaa_target_abs}")
@@ -775,32 +1320,39 @@ def main() -> None:
         if not args.current_metric_csv.exists():
             raise FileNotFoundError(args.current_metric_csv)
 
+        print("Use precomputed current-segment OmegaA CSV override.")
         model_metric = read_current_metric_csv(
             path=args.current_metric_csv,
             metric_column=args.metric_column,
             ystart=y1,
             yend=y2,
         )
-
-        for yy, val in model_metric.items():
-            ann_metric[yy - y0] = val
-
-        pd.DataFrame(
-            {
-                "year": list(model_metric.keys()),
-                "OmegaA": list(model_metric.values()),
-            }
-        ).to_csv(model_metric_csv, index=False)
-
-        print(f"Wrote model OmegaA CSV: {model_metric_csv}")
     else:
-        print("No --current-metric-csv was provided.")
-        print("Using OmegaA values already filled from previous pickle and/or --hist-input-csv.")
-        seg_years = np.arange(y1, y2 + 1)
-        seg_vals = ann_metric[seg_years - y0]
-        if np.isfinite(seg_vals).all():
-            pd.DataFrame({"year": seg_years, "OmegaA": seg_vals}).to_csv(model_metric_csv, index=False)
-            print(f"Wrote model OmegaA CSV from existing state: {model_metric_csv}")
+        model_metric = compute_annual_omegaa_from_ocn_history(
+            ocn_hist_dir=args.ocn_hist_dir,
+            case=args.archive_case,
+            stream=args.ocn_stream,
+            ystart=y1,
+            yend=y2,
+            direct_var=args.omegaa_direct_var,
+            depth_index=args.omegaa_depth_index,
+            numerator_var=args.omegaa_numerator_var,
+            denominator_var=args.omegaa_denominator_var,
+            area_var=args.area_var,
+            area_grid_file=args.area_grid_file,
+        )
+
+    for yy, val in model_metric.items():
+        ann_metric[yy - y0] = val
+
+    pd.DataFrame(
+        {
+            "year": list(model_metric.keys()),
+            "OmegaA": list(model_metric.values()),
+        }
+    ).to_csv(model_metric_csv, index=False)
+
+    print(f"Wrote model OmegaA CSV: {model_metric_csv}")
 
     validate_required_inputs(
         y0=y0,
