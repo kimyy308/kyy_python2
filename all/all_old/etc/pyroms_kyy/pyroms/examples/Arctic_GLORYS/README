@@ -1,0 +1,45 @@
+WARNING: I have only run the INI file script so far.
+
+1. Note to self:
+
+GLORYS has a default spval of -32.xxx for temp and salt. This is not
+a good idea for ROMS, with its:
+
+       IF (ABS(wrk(i)).ge.ABS(Aspval)) THEN
+	   wrk(i)=0.0_r8                 ! masked with _FillValue
+
+You need:
+
+ncatted -a _FillValue,temp,m,d,1.e37 -a _FillValue,salt,m,d,1.e37
+GLORYS2V3_1dAV_19980101_1998010_ic_ARCTIC2.nc
+
+Do this after the remapping (at least for salt).
+
+
+2. I chose to combine the fields for one day into one for the initial
+conditions. It's kind of a pain, so you probably want to handle the
+boundary conditions field by field, then combine them afterwards.
+
+Some of the history:
+   ncrename -d deptht,depth_one -v deptht,depth_one
+GLORYS2V3_1dAV_20040101_20040102_grid2D_R20040107.nc
+GLORYS2V3_1dAV_20040101_20040102.nc
+   ncrename -d deptht,depth_one -v deptht,depth_one
+GLORYS2V3_1dAV_20040101_20040102_icemod_R20040107.nc
+GLORYS2V3_1dAV_20040101_20040102_icemod.nc
+   ncks -A GLORYS2V3_1dAV_20040101_20040102_icemod.nc
+GLORYS2V3_1dAV_20040101_20040102.nc
+   rm GLORYS2V3_1dAV_20040101_20040102_icemod.nc
+   ncks -A GLORYS2V3_1dAV_20040101_20040102_gridV_R20040107.nc
+GLORYS2V3_1dAV_20040101_20040102.nc
+   ncks -A GLORYS2V3_1dAV_20040101_20040102_gridU_R20040107.nc
+GLORYS2V3_1dAV_20040101_20040102.nc
+   ncks -A GLORYS2V3_1dAV_20040101_20040102_gridT_R20040107.nc
+GLORYS2V3_1dAV_20040101_20040102.nc
+   ncks -A GLORYS2V3_1dAV_20040101_20040102_gridS_R20040107.nc
+GLORYS2V3_1dAV_20040101_20040102.nc
+
+
+3. This is an arctic domain, using yrange to subset the world.
+A more equatorial problem should use irange, jrange instead. Be
+consistent and edit all the *.py files here consistently.
