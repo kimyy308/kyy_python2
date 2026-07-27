@@ -1,0 +1,9 @@
+ ! NOAA/PMEL TMAP
+ ! FERRET v7.43 (optimized)
+ ! Linux 3.10.0-862.el7.x86_64 64-bit - 11/30/18
+ !  8-Dec-25 18:47     
+
+use /proj/kimyy/Observation/longhurst_v4_2010/Longhurst_1deg_mask.nc
+show data
+shade longhurst_mask
+exit

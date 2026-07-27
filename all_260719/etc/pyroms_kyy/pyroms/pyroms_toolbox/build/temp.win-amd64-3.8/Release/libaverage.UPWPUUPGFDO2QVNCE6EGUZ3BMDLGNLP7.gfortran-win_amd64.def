@@ -1,0 +1,3 @@
+EXPORTS
+    avg2d_ @1
+    avg3d_ @2

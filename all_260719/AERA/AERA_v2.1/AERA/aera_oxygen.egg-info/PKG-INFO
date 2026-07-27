@@ -1,0 +1,20 @@
+Metadata-Version: 2.4
+Name: aera-oxygen
+Version: 2.1.0
+Summary: Modified AERA algorithm for oxygen-based adaptive emissions
+Author: Yong-Yub Kim / modified from AERA
+License: CC BY-NC-SA 4.0
+Keywords: AERA,oxygen,climate change,mitigation
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: netCDF4
+Requires-Dist: scipy
+Requires-Dist: dask[complete]
+Requires-Dist: xarray
+Dynamic: author
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: summary

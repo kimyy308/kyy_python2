@@ -1,0 +1,15 @@
+name: yy
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - cartopy=0.21.1
+  - cmocean=3.0.3
+  - matplotlib-base=3.7.2
+  - matplotlib-inline=0.1.6
+  - netcdf4=1.6.0
+  - nodejs=18.16.1
+  - numpy=1.25.1
+  - python=3.11.4
+  - xarray=2023.7.0
+prefix: /Users/kimyy/opt/miniconda3/envs/yy

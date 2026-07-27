@@ -1,0 +1,24 @@
+Metadata-Version: 2.4
+Name: aera
+Version: 1.0
+Summary: Implementation of the AERA algorithm (see Terhaar et al., in review)
+Author: Climate and Environmental Physics, University of Bern
+Author-email: jens.terhaar@unibe.ch
+License: CC BY-NC-SA 4.0
+Project-URL: Source Code, https://github.com/Jete90/AERA
+Keywords: research,science,climate change,mitigation
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: netCDF4
+Requires-Dist: scipy
+Requires-Dist: dask[complete]
+Requires-Dist: xarray
+Dynamic: author
+Dynamic: author-email
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: project-url
+Dynamic: requires-dist
+Dynamic: summary

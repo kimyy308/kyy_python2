@@ -1,0 +1,2 @@
+year_stocktake,temp_target_abs,total_emission_budget,ff_emission_budget,reb,ec_cost,ec_reb_diff,ec_overshoot_integral,ec_slope_t1,ec_slope_change,ec_overshoot,ec_curvature,ec_target_year_rel,ec_a,ec_b,ec_c,ec_d
+2020,289.383,1033.193,614.167,193.465,1.446,4.785,0.000,-0.504,1.200,-0.000,1.446,48.000,-2.477575231480687e-06,0.005480468749999924,-0.5089999999999981,12.078999999999999
