@@ -1,2 +1,6 @@
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+all/mpi/scheduler.json
