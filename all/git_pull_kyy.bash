@@ -5,7 +5,7 @@ repo='kyy_python2' # Remote repository name you want to pull
 reponame='origin' # Bookmark for the remote repository
 branch='main' # Branch name you want to pull
 
-#rm -rf ./.git
+rm -rf ./.git
 
 git init
 git config --global user.name ${account}
