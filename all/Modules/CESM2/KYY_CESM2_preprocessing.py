@@ -59,6 +59,54 @@ class CESM2_config:
                 self.model='cam.h1'
             if self.comp=='ocn':
                 self.model='pop.h'
+
+    def HCST_path_load(self, var, tfreq=None, model=None):
+        tfreq = tfreq if tfreq is not None else self.tfreq
+        model = model if model is not None else self.model
+    
+        self.HCST_rootdir = '/mnt/lustre/proj/earth.system.predictability/HCST_EXP_timeseries/archive'
+        command = 'ls ' + self.HCST_rootdir + '| grep f09_g17 | cut -d ''.'' -f 3-4'
+        HCST_members_raw = subprocess.check_output(command, shell=True, text=True)
+        self.HCST_members = [entry for entry in HCST_members_raw.split('\n') if entry]
+        self.HCST_ensembles = [ens for ens in range(len(self.HCST_members))]
+        self.HCST_file_list = []
+    
+        HCST_iy_files = []
+        for iyear in range(self.year_s, self.year_e + 1):
+            HCST_ens_files = []
+            for member in self.HCST_members:
+                HCST_casename_M = self.resol + '.hcst.' + member
+                HCST_casename = HCST_casename_M + '_i' + str(iyear)
+                # command = ( 
+                #     'ls ' + self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' + 
+                #     self.comp + '/proc/tseries/' + tfreq + '| grep \'.' + var + '\.'' + '| grep \'' + model + '\''
+                # )
+                command = (
+                    'ls ' + self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' +
+                    self.comp + '/proc/tseries/' + tfreq + "| grep '." + var + ".' | grep '" + model + "'"
+                )
+                HCST_files_raw = subprocess.check_output(command, shell=True, text=True)
+                HCST_files = [entry for entry in HCST_files_raw.split('\n') if entry]
+                HCST_files = sorted(HCST_files)
+    
+                HCST_filtered_files = []
+                for fname in HCST_files:
+                    match1 = re_mod.search(r'-(\d{4})12', fname)
+                    match2 = re_mod.search(r'\.(\d{4})01', fname)
+                    if match1 and match2:
+                        year1 = int(match1.group(1))
+                        year2 = int(match2.group(1))
+                        if year1 >= self.year_s and year2 <= self.year_e:
+                            fpath = (
+                                self.HCST_rootdir + '/' + HCST_casename_M + '/' + HCST_casename + '/' +
+                                self.comp + '/proc/tseries/' + tfreq + '/' + fname
+                            )
+                            HCST_filtered_files.append(fpath)
+                HCST_ens_files.append(HCST_filtered_files)                
+            HCST_iy_files.append(HCST_ens_files)
+    
+        self.HCST_file_list = HCST_iy_files
+
     
     def HCST_path_load(self, var, tfreq=None, model=None):
         tfreq = tfreq if tfreq is not None else self.tfreq
