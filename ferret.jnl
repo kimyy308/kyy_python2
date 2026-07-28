@@ -1,0 +1,7 @@
+ ! NOAA/PMEL TMAP
+ ! FERRET v7.43 (optimized)
+ ! Linux 3.10.0-862.el7.x86_64 64-bit - 11/30/18
+ ! 19-Mar-25 00:41     
+
+use '/mnt/lustre/proj/earth.system.predictability/HCST_EXP_timeseries/archive/f09_g17.hcst.projdv7.3_ba-20p5/f09_g17.hcst.projdv7.3_ba-20p5_i2017/ocn/proc/tseries/month_1/f09_g17.hcst.projdv7.3_ba-20p5_i2017.pop.h.PD.201701-202112.nc'
+exit
